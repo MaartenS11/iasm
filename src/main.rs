@@ -17,8 +17,9 @@ fn promt(message: &str) -> String {
 fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>) {
     let mut instruction_name = instruction;
     let mut params_string = "";
-    if instruction.contains(" ") {
-        let split = instruction.split_once(" ").expect("Expected space in between instruction name and arguments!");
+    let s = instruction.split_once(" ");
+    if s != None {
+        let split = s.unwrap();
         instruction_name = split.0;
         params_string = split.1;
     }
