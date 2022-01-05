@@ -15,8 +15,14 @@ fn promt(message: &str) -> String {
 }
 
 fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>) {
-    let split = instruction.split_once(" ");
-    let (instruction_name, params_string) = split.expect("Expected space in between instruction name and arguments!");
+    let mut instruction_name = instruction;
+    let mut params_string = "";
+    if instruction.contains(" ") {
+        let split = instruction.split_once(" ").expect("Expected space in between instruction name and arguments!");
+        instruction_name = split.0;
+        params_string = split.1;
+    }
+    
     let params: Vec<&str> = params_string.trim().split(",").collect();
 
     match instruction_name {
@@ -63,7 +69,7 @@ fn main() {
 
     let lines: Vec<&str> = content.split("\n").collect();
     println!("Total amount of lines: {}", lines.len());
-    let digit_count = lines.len().to_string().len();
+    let digit_count = (lines.len() -1).to_string().len();
     for (i, line) in lines.iter().enumerate() {
         println!("{:width$}|{}", i, line, width=digit_count);
     }
