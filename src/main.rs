@@ -35,10 +35,15 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = *variables.get_mut(params[0].trim()).unwrap();
             let b = *variables.get_mut(params[1].trim()).unwrap();
             *variables.get_mut(params[0]).unwrap() = a + b;
-        }
+        },
+        "mul" => {
+            let a = *variables.get_mut(params[0].trim()).unwrap();
+            let b = *variables.get_mut(params[1].trim()).unwrap();
+            *variables.get_mut(params[0]).unwrap() = a * b;
+        },
         "cmp" => {
-            let a = *variables.get_mut(params[0]).unwrap();
-            let b = *variables.get_mut(params[1]).unwrap();
+            let a = *variables.get_mut(params[0].trim()).unwrap();
+            let b = *variables.get_mut(params[1].trim()).unwrap();
             *variables.get_mut("ZF").unwrap() = (a == b) as i32;
             *variables.get_mut("SF").unwrap() = (a - b < 0) as i32;
         },
