@@ -2,6 +2,7 @@ use core::panic;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::fs;
+use std::time::Instant;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -84,7 +85,7 @@ fn main() {
         let mut line = line.trim().to_string();
 
         if line.ends_with(":") {
-            jump_tag_map.insert(line[..line.len()-1].to_string(), i);
+            jump_tag_map.insert(line[..line.len()-1].to_string(), i + 1);
             program.push("nop".to_string());
         }
         else if line.starts_with("j") {
@@ -109,6 +110,7 @@ fn main() {
     variables.insert("SF", random_data());
     variables.insert("eip", 0);
     
+    let start = Instant::now();
     let mut eip = variables["eip"]  as usize;
     while eip < program.len() {
         let ins = &program[eip][..];
@@ -116,6 +118,8 @@ fn main() {
         evaluate(ins, &mut variables);
         eip = variables["eip"]  as usize;
     }
+    let duration = start.elapsed();
+    println!("Total time elapsed: {}ms, {}ns", duration.as_millis(), duration.as_nanos());
 
     loop {
         let ins = &promt("$ ")[..];
