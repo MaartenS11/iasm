@@ -73,11 +73,31 @@ fn main() {
     let content = fs::read_to_string("test.asm")
         .expect("Could not read file!");
 
+    let mut program: Vec<String> = Vec::new();
+    let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let lines: Vec<&str> = content.split("\n").collect();
     println!("Total amount of lines: {}", lines.len());
     let digit_count = (lines.len() -1).to_string().len();
     for (i, line) in lines.iter().enumerate() {
         println!("{:width$}|{}", i, line, width=digit_count);
+        
+        let mut line = line.trim().to_string();
+
+        if line.ends_with(":") {
+            jump_tag_map.insert(line[..line.len()-1].to_string(), i);
+            program.push("nop".to_string());
+        }
+        else if line.starts_with("j") {
+            let (instruction_name, param) = line.split_once(" ").unwrap();
+            if jump_tag_map.contains_key(param) {
+                line = format!("{} {}", instruction_name, jump_tag_map[param]);
+            }
+            
+            program.push(line);
+        }
+        else {
+            program.push(line);
+        }
     }
 
     let mut variables: HashMap<&str, i32> = HashMap::new();
@@ -90,8 +110,8 @@ fn main() {
     variables.insert("eip", 0);
     
     let mut eip = variables["eip"]  as usize;
-    while eip < lines.len() {
-        let ins = lines[eip];
+    while eip < program.len() {
+        let ins = &program[eip][..];
         println!("{}", ins);
         evaluate(ins, &mut variables);
         eip = variables["eip"]  as usize;
