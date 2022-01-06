@@ -82,22 +82,35 @@ fn main() {
     for (i, line) in lines.iter().enumerate() {
         println!("{:width$}|{}", i, line, width=digit_count);
         
-        let mut line = line.trim().to_string();
+        let line = line.trim().to_string();
 
         if line.ends_with(":") {
             jump_tag_map.insert(line[..line.len()-1].to_string(), i + 1);
             program.push("nop".to_string());
         }
-        else if line.starts_with("j") {
-            let (instruction_name, param) = line.split_once(" ").unwrap();
-            if jump_tag_map.contains_key(param) {
-                line = format!("{} {}", instruction_name, jump_tag_map[param]);
-            }
-            
-            program.push(line);
-        }
         else {
             program.push(line);
+        }
+    }
+
+    for i in 0..program.len() {
+        let line = &program[i];
+        if line.starts_with("j") {
+            let (instruction_name, param) = line.split_once(" ").unwrap();
+            if jump_tag_map.contains_key(param) {
+                program[i] = format!("{} {}", instruction_name, jump_tag_map[param]).to_string();
+            }
+            else {
+                let jump_location = param.parse::<i32>();
+                match jump_location {
+                    Ok(val) => {
+                        if val < 0 || val >= program.len() as i32 {
+                            panic!("Parameter \"{}\" is not a valid jump destination!", param)
+                        }
+                    },
+                    Err(_) => panic!("Label \"{}\" is not a valid jump destination!", param)
+                }
+            }
         }
     }
 
