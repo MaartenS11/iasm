@@ -132,36 +132,39 @@ fn main() {
     variables.insert("SF", random_data());
     variables.insert("eip", 0);
     
+    let debug = true;
     let start = Instant::now();
     let mut eip = variables["eip"]  as usize;
     while eip < program.len() {
         let ins = &program[eip][..];
         println!("{}", ins);
-        for i in 0..program.len() {
-            if i == eip {
-                print!("-> ") 
-            }
-            else {
-                print!("   ");
-            }   
-            //│ != |
-            println!("{:width$}│{}", i, program[i], width=digit_count);
-        }
         evaluate(ins, &mut variables);
         eip = variables["eip"]  as usize;
         
-        let mut input = promt("$ ");
-        while input != "stop" && input != "continue" && input != "" {
-            if variables.contains_key(&input[..]) {
-                println!("{}", variables[&input[..]]);
-            } 
-            else {
-                println!("Invalid command");
+        if debug {
+            for i in 0..program.len() {
+                if i == eip {
+                    print!("-> ") 
+                }
+                else {
+                    print!("   ");
+                }   
+                //│ != |
+                println!("{:width$}│{}", i, program[i], width=digit_count);
             }
-            input = promt("$ ");
-        }
-        if input == "stop" {
-            break;
+            let mut input = promt("$ ");
+            while input != "stop" && input != "continue" && input != "" {
+                if variables.contains_key(&input[..]) {
+                    println!("{}", variables[&input[..]]);
+                } 
+                else {
+                    println!("Invalid command");
+                }
+                input = promt("$ ");
+            }
+            if input == "stop" {
+                break;
+            }
         }
     }
     let duration = start.elapsed();
