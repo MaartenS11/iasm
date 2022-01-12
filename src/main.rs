@@ -1,7 +1,7 @@
 use core::panic;
 use std::collections::HashMap;
 use std::io::{self, Write};
-use std::fs;
+use std::{fs, process};
 use std::time::Instant;
 use std::env;
 
@@ -122,13 +122,17 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let mut debug = false;
     if args.len() < 2 {
-        panic!("Expected atleast one argument!");
+        eprintln!("Expected at least one argument!");
+        process::exit(1);
     }
     
     if args.len() >= 3 {
         match &args[2][..] {
             "debug" => debug = true,
-            _ => panic!("Not a valid option!")
+            _ => {
+                eprintln!("Argument \"{}\" is not a valid option", args[2]);
+                process::exit(1);
+            }
         }
     }
 
