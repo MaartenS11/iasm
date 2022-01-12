@@ -16,7 +16,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [i32; 16]) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -60,6 +60,17 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
+        "push" => {
+            let a = *variables.get_mut(params[0].trim()).unwrap();
+            *variables.get_mut("esp").unwrap() -= 1;
+            let esp = *variables.get_mut("esp").unwrap() as usize;
+            memory[esp] = a;
+        }
+        "pop" => {
+            let esp = *variables.get_mut("esp").unwrap() as usize;
+            *variables.get_mut(params[0].trim()).unwrap() = memory[esp];
+            *variables.get_mut("esp").unwrap() += 1;
+        }
         _ => panic!("Instruction does not exist!")
     }
 
@@ -141,6 +152,7 @@ fn main() {
     let program = compile(content);
     let digit_count = (program.len() -1).to_string().len();
 
+    let mut memory: [i32; 16] = [0; 16];
     let mut variables: HashMap<&str, i32> = HashMap::new();
     variables.insert("eax", random_data());
     variables.insert("ebx", random_data());
@@ -148,7 +160,7 @@ fn main() {
     variables.insert("edx", random_data());
     variables.insert("esi", random_data());
     variables.insert("edi", random_data());
-    variables.insert("esp", random_data());
+    variables.insert("esp", memory.len() as i32);
     variables.insert("ebp", random_data());
     variables.insert("ZF", random_data());
     variables.insert("SF", random_data());
@@ -159,7 +171,7 @@ fn main() {
     while eip < program.len() {
         let ins = &program[eip][..];
         println!("{}", ins);
-        evaluate(ins, &mut variables);
+        evaluate(ins, &mut variables, &mut memory);
         eip = variables["eip"]  as usize;
         
         if debug {
@@ -199,7 +211,7 @@ fn main() {
         }
         match ins {
             "exit" => break,
-            _ => evaluate(ins, &mut &mut variables)
+            _ => evaluate(ins, &mut variables, &mut memory)
         }
     }
 }
