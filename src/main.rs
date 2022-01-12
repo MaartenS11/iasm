@@ -70,23 +70,24 @@ fn random_data() -> i32 {
     return ptr as i32;
 }
 
-fn main() {
-    let content = fs::read_to_string("test.asm")
-        .expect("Could not read file!");
-
+fn compile(content: String) -> Vec<String> {
     let mut program: Vec<String> = Vec::new();
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let lines: Vec<&str> = content.split("\n").collect();
     println!("Total amount of lines: {}", lines.len());
     let digit_count = (lines.len() -1).to_string().len();
+    let mut offset = 0;
     for (i, line) in lines.iter().enumerate() {
         println!("{:width$}|{}", i, line, width=digit_count);
         
         let line = line.trim().to_string();
 
         if line.ends_with(":") {
-            jump_tag_map.insert(line[..line.len()-1].to_string(), i + 1);
-            program.push("nop".to_string());
+            jump_tag_map.insert(line[..line.len()-1].to_string(), i - offset);
+            offset += 1; // We are removing the line with the jump tag.
+        }
+        else if line == "" {
+            offset += 1;
         }
         else {
             program.push(line);
@@ -113,6 +114,14 @@ fn main() {
             }
         }
     }
+    program
+}
+
+fn main() {
+    let content = fs::read_to_string("test.asm")
+        .expect("Could not read file!");
+    let program = compile(content);
+    let digit_count = (program.len() -1).to_string().len();
 
     let mut variables: HashMap<&str, i32> = HashMap::new();
     variables.insert("eax", random_data());
@@ -128,8 +137,32 @@ fn main() {
     while eip < program.len() {
         let ins = &program[eip][..];
         println!("{}", ins);
+        for i in 0..program.len() {
+            if i == eip {
+                print!("-> ") 
+            }
+            else {
+                print!("   ");
+            }   
+            //│ != |
+            println!("{:width$}│{}", i, program[i], width=digit_count);
+        }
         evaluate(ins, &mut variables);
         eip = variables["eip"]  as usize;
+        
+        let mut input = promt("$ ");
+        while input != "stop" && input != "continue" && input != "" {
+            if variables.contains_key(&input[..]) {
+                println!("{}", variables[&input[..]]);
+            } 
+            else {
+                println!("Invalid command");
+            }
+            input = promt("$ ");
+        }
+        if input == "stop" {
+            break;
+        }
     }
     let duration = start.elapsed();
     println!("Total time elapsed: {}ms, {}ns", duration.as_millis(), duration.as_nanos());
