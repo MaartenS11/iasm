@@ -70,7 +70,7 @@ fn random_data() -> i32 {
     return ptr as i32;
 }
 
-fn compile(content: String) -> Vec<String> {
+fn compile(content: &str) -> Vec<String> {
     let mut program: Vec<String> = Vec::new();
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let lines: Vec<&str> = content.split("\n").collect();
@@ -78,7 +78,7 @@ fn compile(content: String) -> Vec<String> {
     let digit_count = (lines.len() -1).to_string().len();
     let mut offset = 0;
     for (i, line) in lines.iter().enumerate() {
-        println!("{:width$}|{}", i, line, width=digit_count);
+        println!("{:width$}│{}", i, line, width=digit_count);
         
         let line = line.trim().to_string();
 
@@ -118,8 +118,8 @@ fn compile(content: String) -> Vec<String> {
 }
 
 fn main() {
-    let content = fs::read_to_string("test.asm")
-        .expect("Could not read file!");
+    let content = &fs::read_to_string("test.asm")
+        .expect("Could not read file!")[..];
     let program = compile(content);
     let digit_count = (program.len() -1).to_string().len();
 
