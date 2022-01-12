@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::fs;
 use std::time::Instant;
+use std::env;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -118,6 +119,15 @@ fn compile(content: &str) -> Vec<String> {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let mut debug = false;    
+    if args.len() >= 2 {
+        match &args[1][..] {
+            "debug" => debug = true,
+            _ => panic!("Not a valid option!")
+        }
+    }
+
     let content = &fs::read_to_string("test.asm")
         .expect("Could not read file!")[..];
     let program = compile(content);
@@ -131,8 +141,7 @@ fn main() {
     variables.insert("ZF", random_data());
     variables.insert("SF", random_data());
     variables.insert("eip", 0);
-    
-    let debug = true;
+
     let start = Instant::now();
     let mut eip = variables["eip"]  as usize;
     while eip < program.len() {
