@@ -120,15 +120,19 @@ fn compile(content: &str) -> Vec<String> {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let mut debug = false;    
-    if args.len() >= 2 {
-        match &args[1][..] {
+    let mut debug = false;
+    if args.len() < 2 {
+        panic!("Expected atleast one argument!");
+    }
+    
+    if args.len() >= 3 {
+        match &args[2][..] {
             "debug" => debug = true,
             _ => panic!("Not a valid option!")
         }
     }
 
-    let content = &fs::read_to_string("test.asm")
+    let content = &fs::read_to_string(&args[1][..])
         .expect("Could not read file!")[..];
     let program = compile(content);
     let digit_count = (program.len() -1).to_string().len();
