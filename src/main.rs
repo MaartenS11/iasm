@@ -146,6 +146,10 @@ fn main() {
     variables.insert("ebx", random_data());
     variables.insert("ecx", random_data());
     variables.insert("edx", random_data());
+    variables.insert("esi", random_data());
+    variables.insert("edi", random_data());
+    variables.insert("esp", random_data());
+    variables.insert("ebp", random_data());
     variables.insert("ZF", random_data());
     variables.insert("SF", random_data());
     variables.insert("eip", 0);
