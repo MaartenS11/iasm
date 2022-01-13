@@ -17,15 +17,7 @@ jmp edx
 
 main:
 load esi, 5
-mov eax, eip
-load ebx, 5
-add eax, ebx
-push eax
-jmp fibonacci
+call fibonacci
 
 load esi, 6
-mov eax, eip
-load ebx, 5
-add eax, ebx
-push eax
-jmp fibonacci
+call fibonacci

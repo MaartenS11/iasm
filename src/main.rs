@@ -71,16 +71,28 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             *variables.get_mut("esp").unwrap() -= 1;
             let esp = *variables.get_mut("esp").unwrap() as usize;
             memory[esp] = a;
-        }
+        },
         "pop" => {
             let esp = *variables.get_mut("esp").unwrap() as usize;
             *variables.get_mut(params[0].trim()).unwrap() = memory[esp];
             *variables.get_mut("esp").unwrap() += 1;
+        },
+        "call" => {
+            let jump_pos: i32 = params[0].trim().parse().expect("Expected number!");
+            let eip = *variables.get_mut("eip").unwrap();
+            stack_push(variables, memory, eip + 1);
+            *variables.get_mut("eip").unwrap() = jump_pos - 1;
         }
         _ => panic!("Instruction does not exist!")
     }
 
     *variables.get_mut("eip").unwrap() += 1;
+}
+
+fn stack_push(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16], value: i32) {
+    *variables.get_mut("esp").unwrap() -= 1;
+    let esp = *variables.get_mut("esp").unwrap() as usize;
+    memory[esp] = value;
 }
 
 fn random_data() -> i32 {
@@ -114,7 +126,7 @@ fn compile(content: &str) -> Vec<String> {
 
     for i in 0..program.len() {
         let line = &program[i];
-        if line.starts_with("j") {
+        if line.starts_with("j") || line.starts_with("call") {
             let (instruction_name, param) = line.split_once(" ").unwrap();
             if jump_tag_map.contains_key(param) {
                 program[i] = format!("{} {}", instruction_name, jump_tag_map[param]).to_string();
