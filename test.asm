@@ -12,8 +12,7 @@ inc eax
 cmp eax, esi
 jnz loop
 mov eax, edx
-pop edx
-jmp edx
+ret
 
 main:
 load esi, 5

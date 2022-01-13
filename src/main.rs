@@ -82,6 +82,10 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let eip = *variables.get_mut("eip").unwrap();
             stack_push(variables, memory, eip + 1);
             *variables.get_mut("eip").unwrap() = jump_pos - 1;
+        },
+        "ret" => {
+            let jump_pos = stack_pop(variables, memory);
+            *variables.get_mut("eip").unwrap() = jump_pos - 1;
         }
         _ => panic!("Instruction does not exist!")
     }
@@ -93,6 +97,13 @@ fn stack_push(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16], value:
     *variables.get_mut("esp").unwrap() -= 1;
     let esp = *variables.get_mut("esp").unwrap() as usize;
     memory[esp] = value;
+}
+
+fn stack_pop(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16]) -> i32 {
+    let esp = *variables.get_mut("esp").unwrap() as usize;
+    let value = memory[esp];
+    *variables.get_mut("esp").unwrap() += 1;
+    value
 }
 
 fn random_data() -> i32 {
