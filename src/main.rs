@@ -68,14 +68,10 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         },
         "push" => {
             let a = *variables.get_mut(params[0].trim()).unwrap();
-            *variables.get_mut("esp").unwrap() -= 1;
-            let esp = *variables.get_mut("esp").unwrap() as usize;
-            memory[esp] = a;
+            stack_push(variables, memory, a);
         },
         "pop" => {
-            let esp = *variables.get_mut("esp").unwrap() as usize;
-            *variables.get_mut(params[0].trim()).unwrap() = memory[esp];
-            *variables.get_mut("esp").unwrap() += 1;
+            *variables.get_mut(params[0].trim()).unwrap() = stack_pop(variables, memory);
         },
         "call" => {
             let jump_pos: i32 = params[0].trim().parse().expect("Expected number!");
