@@ -51,7 +51,13 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         },
         "nop" => (),
         "jmp" => {
-            let jump_pos: i32 = params[0].trim().parse().expect("Expected number!");
+            let jump_pos;
+            if variables.contains_key(params[0]) {
+                jump_pos = *variables.get_mut(params[0].trim()).unwrap();
+            }
+            else {
+                jump_pos = params[0].trim().parse().expect("Expected number!");
+            }
             *variables.get_mut("eip").unwrap() = jump_pos - 1;
         },
         "jnz" => {
@@ -113,6 +119,9 @@ fn compile(content: &str) -> Vec<String> {
             if jump_tag_map.contains_key(param) {
                 program[i] = format!("{} {}", instruction_name, jump_tag_map[param]).to_string();
             }
+            /*else if variables.contains_key(param) {
+                program[i] = format!("{} {}", instruction_name, jump_tag_map[param]).to_string();
+            }
             else {
                 let jump_location = param.parse::<i32>();
                 match jump_location {
@@ -123,7 +132,7 @@ fn compile(content: &str) -> Vec<String> {
                     },
                     Err(_) => panic!("Label \"{}\" is not a valid jump destination!", param)
                 }
-            }
+            }*/
         }
     }
     program
