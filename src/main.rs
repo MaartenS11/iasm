@@ -30,7 +30,14 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 
     match instruction_name {
         "mov" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "load" => *variables.get_mut(params[0]).unwrap() = params[1].trim().parse().expect("Expected number!"),
+        "load" => {
+            let operand = params[1].trim();
+            if operand.starts_with('[') {
+                *variables.get_mut(params[0]).unwrap() = memory[parse_memory_location(variables, operand) as usize];
+            } else {
+                *variables.get_mut(params[0]).unwrap() = operand.parse().expect("Expected number!");
+            }
+        },
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
         "add" => {
@@ -102,6 +109,19 @@ fn stack_pop(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16]) -> i32 
     value
 }
 
+// Take a String and parse it into a index for a block of memory.
+fn parse_memory_location(variables: &HashMap<&str, i32>, str: &str) -> i32 {
+    if !str.starts_with('[') || !str.ends_with(']') {
+        panic!("Incorrectly formatted address mode");
+    }
+    let str = &str[1..str.len()-1];
+    let split = str.split_once("+").unwrap();
+    let reg = split.0.trim();
+    let reg_value = variables[reg];
+    let offset = split.1.trim().parse::<i32>().unwrap()/4;
+    reg_value + offset
+}
+
 fn random_data() -> i32 {
     let ptr = Box::into_raw(Box::new(123));
     return ptr as i32;
@@ -123,7 +143,7 @@ fn compile(content: &str) -> Vec<String> {
             jump_tag_map.insert(line[..line.len()-1].to_string(), i - offset);
             offset += 1; // We are removing the line with the jump tag.
         }
-        else if line == "" {
+        else if line == "" || line.starts_with(";") {
             offset += 1;
         }
         else {
