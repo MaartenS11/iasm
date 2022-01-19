@@ -32,6 +32,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         "mov" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
         "ld" => *variables.get_mut(params[0]).unwrap() = memory[parse_memory_location(variables, params[1].trim()) as usize],
         "li" => *variables.get_mut(params[0]).unwrap() = params[1].trim().parse().expect("Expected number!"),
+        "st" => memory[parse_memory_location(variables, params[1].trim()) as usize] = variables[params[0]],
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
         "add" => {
