@@ -61,7 +61,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             }
             *variables.get_mut("eip").unwrap() = jump_pos - 1;
         },
-        "jnz" => {
+        "jne" | "jnz" => {
             if *variables.get_mut("ZF").unwrap() == 0 {
                 let jump_pos: i32 = params[0].trim().parse().expect("Expected number!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;

@@ -11,7 +11,7 @@ fibonacci:
     mov ecx, ebx
     inc eax
     cmp eax, esi
-    jnz .loop
+    jne .loop
     mov eax, edx
     ret
 
