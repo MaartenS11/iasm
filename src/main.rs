@@ -105,16 +105,25 @@ fn stack_pop(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16]) -> i32 
 }
 
 // Take a String and parse it into a index for a block of memory.
-fn parse_memory_location(variables: &HashMap<&str, i32>, str: &str) -> i32 {
+fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) -> i32 {
     if !str.starts_with('[') || !str.ends_with(']') {
         panic!("Incorrectly formatted address mode");
     }
-    let str = &str[1..str.len()-1];
+    let str = &str[1..str.len()-1].trim();
+    if variables.contains_key(str) {
+        return variables[str];
+    }
     let split = str.split_once("+").unwrap();
     let reg = split.0.trim();
     let reg_value = variables[reg];
     let offset = split.1.trim().parse::<i32>().unwrap()/4;
     reg_value + offset
+}
+
+fn print_stack(variables: &HashMap<&str, i32>, memory: &[i32; 16]) {
+    for i in (variables["esp"] as usize)..memory.len() {
+        println!("{:#x}│{}", i*4, memory[i]);
+    }
 }
 
 fn random_data() -> i32 {
@@ -232,7 +241,10 @@ fn main() {
             while input != "stop" && input != "continue" && input != "" {
                 if variables.contains_key(&input[..]) {
                     println!("{}", variables[&input[..]]);
-                } 
+                }
+                else if input == "stack" {
+                    print_stack(&variables, &memory);
+                }
                 else {
                     println!("Invalid command");
                 }
@@ -253,6 +265,9 @@ fn main() {
             continue;
         }
         match ins {
+            "stack" => {
+                print_stack(&variables, &memory);
+            }
             "exit" => break,
             _ => evaluate(ins, &mut variables, &mut memory)
         }
