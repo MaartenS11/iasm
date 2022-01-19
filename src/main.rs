@@ -30,14 +30,8 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 
     match instruction_name {
         "mov" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "load" => {
-            let operand = params[1].trim();
-            if operand.starts_with('[') {
-                *variables.get_mut(params[0]).unwrap() = memory[parse_memory_location(variables, operand) as usize];
-            } else {
-                *variables.get_mut(params[0]).unwrap() = operand.parse().expect("Expected number!");
-            }
-        },
+        "ld" => *variables.get_mut(params[0]).unwrap() = memory[parse_memory_location(variables, params[1].trim()) as usize],
+        "li" => *variables.get_mut(params[0]).unwrap() = params[1].trim().parse().expect("Expected number!"),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
         "add" => {
