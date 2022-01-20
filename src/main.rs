@@ -40,6 +40,11 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let b = *variables.get_mut(params[1].trim()).unwrap();
             *variables.get_mut(params[0]).unwrap() = a + b;
         },
+        "addi" => {
+            let a = *variables.get_mut(params[0].trim()).unwrap();
+            let b = params[1].trim().parse::<i32>().unwrap();
+            *variables.get_mut(params[0]).unwrap() = a + b;
+        },
         "sub" => {
             let a = *variables.get_mut(params[0].trim()).unwrap();
             let b = *variables.get_mut(params[1].trim()).unwrap();
@@ -99,15 +104,15 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 }
 
 fn stack_push(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16], value: i32) {
-    *variables.get_mut("esp").unwrap() -= 1;
+    *variables.get_mut("esp").unwrap() -= 4;
     let esp = *variables.get_mut("esp").unwrap() as usize;
-    memory[esp] = value;
+    memory[esp/4] = value;
 }
 
 fn stack_pop(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16]) -> i32 {
     let esp = *variables.get_mut("esp").unwrap() as usize;
-    let value = memory[esp];
-    *variables.get_mut("esp").unwrap() += 1;
+    let value = memory[esp/4];
+    *variables.get_mut("esp").unwrap() += 4;
     value
 }
 
@@ -118,17 +123,17 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
     }
     let str = &str[1..str.len()-1].trim();
     if variables.contains_key(str) {
-        return variables[str];
+        return variables[str]/4;
     }
     let split = str.split_once("+").unwrap();
     let reg = split.0.trim();
     let reg_value = variables[reg];
-    let offset = split.1.trim().parse::<i32>().unwrap()/4;
-    reg_value + offset
+    let offset = split.1.trim().parse::<i32>().unwrap();
+    (reg_value + offset)/4
 }
 
 fn print_stack(variables: &HashMap<&str, i32>, memory: &[i32; 16]) {
-    for i in (variables["esp"] as usize)..memory.len() {
+    for i in ((variables["esp"]/4) as usize)..memory.len() {
         println!("{:#x}│{}", i*4, memory[i]);
     }
 }
@@ -219,7 +224,7 @@ fn main() {
     variables.insert("edx", random_data());
     variables.insert("esi", random_data());
     variables.insert("edi", random_data());
-    variables.insert("esp", memory.len() as i32);
+    variables.insert("esp", (memory.len() * 4) as i32);
     variables.insert("ebp", random_data());
     variables.insert("ZF", random_data());
     variables.insert("SF", random_data());
