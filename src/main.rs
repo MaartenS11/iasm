@@ -134,7 +134,7 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
 
 fn print_stack(variables: &HashMap<&str, i32>, memory: &[i32; 16]) {
     for i in ((variables["esp"]/4) as usize)..memory.len() {
-        println!("{:#x}│{}", i*4, memory[i]);
+        println!("{:#04x}│{}", i*4, memory[i]);
     }
 }
 
