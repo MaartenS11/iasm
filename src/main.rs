@@ -57,12 +57,6 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let b = variables[params[2].trim()];
             *variables.get_mut(params[0]).unwrap() = a * b;
         },
-        "cmp" => {
-            let a = *variables.get_mut(params[0].trim()).unwrap();
-            let b = *variables.get_mut(params[1].trim()).unwrap();
-            *variables.get_mut("ZF").unwrap() = (a == b) as i32;
-            *variables.get_mut("SF").unwrap() = (a - b < 0) as i32;
-        },
         "nop" => (),
         "j" => {
             let jump_pos;
@@ -73,12 +67,6 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
                 jump_pos = params[0].trim().parse().expect("Expected number!");
             }
             *variables.get_mut("eip").unwrap() = jump_pos - 1;
-        },
-        "jne" | "jnz" => {
-            if *variables.get_mut("ZF").unwrap() == 0 {
-                let jump_pos: i32 = params[0].trim().parse().expect("Expected number!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
-            }
         },
         "jal" => {
             let jump_pos: i32 = params[params.len()-1].trim().parse().expect("Expected address!");
@@ -92,19 +80,6 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
                 let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
-        },
-        "push" => {
-            let a = *variables.get_mut(params[0].trim()).unwrap();
-            stack_push(variables, memory, a);
-        },
-        "pop" => {
-            *variables.get_mut(params[0].trim()).unwrap() = stack_pop(variables, memory);
-        },
-        "call" => {
-            let jump_pos: i32 = params[0].trim().parse().expect("Expected number!");
-            let eip = *variables.get_mut("eip").unwrap();
-            stack_push(variables, memory, eip + 1);
-            *variables.get_mut("eip").unwrap() = jump_pos - 1;
         },
         "ret" => {
             *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
