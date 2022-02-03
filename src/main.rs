@@ -30,9 +30,9 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 
     match instruction_name {
         "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "lw" => *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, parse_memory_location(variables, params[1].trim())),
+        "lw" | "ld" => *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, parse_memory_location(variables, params[1].trim())),
         "li" => *variables.get_mut(params[0]).unwrap() = params[1].trim().parse().expect("Expected number!"),
-        "sw" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]]),
+        "sw" | "sd" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]]),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
         "add" => {
@@ -52,9 +52,9 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             *variables.get_mut(params[0]).unwrap() = result;
             *variables.get_mut("ZF").unwrap() = (result == 0) as i32;
         },
-        "mul" => {
-            let a = *variables.get_mut(params[0].trim()).unwrap();
-            let b = *variables.get_mut(params[1].trim()).unwrap();
+        "mulw" => {
+            let a = variables[params[1].trim()];
+            let b = variables[params[2].trim()];
             *variables.get_mut(params[0]).unwrap() = a * b;
         },
         "cmp" => {
@@ -109,7 +109,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         "ret" => {
             *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
         }
-        _ => panic!("Instruction does not exist!")
+        _ => panic!("Instruction \"{}\" does not exist!", instruction_name)
     }
 
     *variables.get_mut("eip").unwrap() += 1;
@@ -186,7 +186,7 @@ fn compile(content: &str) -> Vec<String> {
     for (i, line) in lines.iter().enumerate() {
         println!("{:width$}│{}", i, line, width=digit_count);
         
-        let line = line.trim().to_string();
+        let line = line.trim().replace('\t', " ");
         let line = String::from(&line[..line.find('#').unwrap_or_else(|| line.len())]);
 
         if line.ends_with(":") {
@@ -268,6 +268,9 @@ fn main() {
     variables.insert("ZF", random_data());
     variables.insert("SF", random_data());
     variables.insert("eip", 0);
+    
+    variables.insert("s0", random_data());
+    variables.insert("s1", random_data());
     
     variables.insert("a0", random_data());
     variables.insert("a1", random_data());
