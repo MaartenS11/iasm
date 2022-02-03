@@ -105,19 +105,6 @@ fn store_to_memory(memory: &mut [u8; 64], address: i32, value: i32) {
     }
 }
 
-fn stack_push(variables: &mut HashMap<&str, i32>, memory: &mut [u8; 64], value: i32) {
-    *variables.get_mut("sp").unwrap() -= 4;
-    let esp = *variables.get_mut("sp").unwrap();
-    store_to_memory(memory, esp, value);
-}
-
-fn stack_pop(variables: &mut HashMap<&str, i32>, memory: &mut [u8; 64]) -> i32 {
-    let esp = *variables.get_mut("sp").unwrap();
-    let value = load_from_memory(memory, esp);
-    *variables.get_mut("sp").unwrap() += 4;
-    value
-}
-
 // Take a String and parse it into a index for a block of memory.
 fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) -> i32 {
     /*if !str.starts_with('[') || !str.ends_with(']') {
