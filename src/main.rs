@@ -154,6 +154,7 @@ fn compile(content: &str) -> Vec<String> {
         println!("{:width$}│{}", i, line, width=digit_count);
         
         let line = line.trim().to_string();
+        let line = String::from(&line[..line.find(';').unwrap_or_else(|| line.len())]);
 
         if line.ends_with(":") {
             jump_tag_map.insert(line[..line.len()-1].to_string(), i - offset);
