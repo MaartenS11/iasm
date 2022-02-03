@@ -16,7 +16,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [i32; 16]) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 64]) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -30,9 +30,9 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 
     match instruction_name {
         "mov" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "ld" => *variables.get_mut(params[0]).unwrap() = memory[parse_memory_location(variables, params[1].trim()) as usize],
+        "ld" => *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, parse_memory_location(variables, params[1].trim())),
         "li" => *variables.get_mut(params[0]).unwrap() = params[1].trim().parse().expect("Expected number!"),
-        "st" => memory[parse_memory_location(variables, params[1].trim()) as usize] = variables[params[0]],
+        "st" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]]),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
         "add" => {
@@ -103,15 +103,30 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
     *variables.get_mut("eip").unwrap() += 1;
 }
 
-fn stack_push(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16], value: i32) {
-    *variables.get_mut("esp").unwrap() -= 4;
-    let esp = *variables.get_mut("esp").unwrap() as usize;
-    memory[esp/4] = value;
+fn load_from_memory(memory: &[u8; 64], address: i32) -> i32 {
+    let address = address as usize;
+    let mut value: [u8; 4] = Default::default();
+    value.copy_from_slice(&memory[address..address + 4]);
+    i32::from_be_bytes(value)
 }
 
-fn stack_pop(variables: &mut HashMap<&str, i32>, memory: &mut [i32; 16]) -> i32 {
-    let esp = *variables.get_mut("esp").unwrap() as usize;
-    let value = memory[esp/4];
+fn store_to_memory(memory: &mut [u8; 64], address: i32, value: i32) {
+    let address = address as usize;
+    let bytes = value.to_be_bytes();
+    for i in 0..4 {
+        memory[address + i] = bytes[i];
+    }
+}
+
+fn stack_push(variables: &mut HashMap<&str, i32>, memory: &mut [u8; 64], value: i32) {
+    *variables.get_mut("esp").unwrap() -= 4;
+    let esp = *variables.get_mut("esp").unwrap();
+    store_to_memory(memory, esp, value);
+}
+
+fn stack_pop(variables: &mut HashMap<&str, i32>, memory: &mut [u8; 64]) -> i32 {
+    let esp = *variables.get_mut("esp").unwrap();
+    let value = load_from_memory(memory, esp);
     *variables.get_mut("esp").unwrap() += 4;
     value
 }
@@ -123,18 +138,18 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
     }
     let str = &str[1..str.len()-1].trim();
     if variables.contains_key(str) {
-        return variables[str]/4;
+        return variables[str];
     }
     let split = str.split_once("+").unwrap();
     let reg = split.0.trim();
     let reg_value = variables[reg];
     let offset = split.1.trim().parse::<i32>().unwrap();
-    (reg_value + offset)/4
+    reg_value + offset
 }
 
-fn print_stack(variables: &HashMap<&str, i32>, memory: &[i32; 16]) {
-    for i in ((variables["esp"]/4) as usize)..memory.len() {
-        println!("{:#04x}│{}", i*4, memory[i]);
+fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 64]) {
+    for i in ((variables["esp"]/4))..(memory.len()/4) as i32 {
+        println!("{:#04x}│{}", i*4, load_from_memory(memory, i*4));
     }
 }
 
@@ -217,7 +232,7 @@ fn main() {
     let program = compile(content);
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut memory: [i32; 16] = [0; 16];
+    let mut memory: [u8; 64] = [0; 64];
     let mut variables: HashMap<&str, i32> = HashMap::new();
     variables.insert("eax", random_data());
     variables.insert("ebx", random_data());
@@ -225,7 +240,7 @@ fn main() {
     variables.insert("edx", random_data());
     variables.insert("esi", random_data());
     variables.insert("edi", random_data());
-    variables.insert("esp", (memory.len() * 4) as i32);
+    variables.insert("esp", memory.len() as i32);
     variables.insert("ebp", random_data());
     variables.insert("ZF", random_data());
     variables.insert("SF", random_data());
