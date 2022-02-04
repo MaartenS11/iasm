@@ -16,7 +16,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 64]) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 128]) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -31,8 +31,9 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
     match instruction_name {
         "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
         "lw" | "ld" => *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, parse_memory_location(variables, params[1].trim())),
-        "li" => *variables.get_mut(params[0]).unwrap() = params[1].trim().parse().expect("Expected number!"),
-        "sw" | "sd" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]]),
+        "li" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
+        "sw" | "sd" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
+        "sb" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
         "add" | "addw" => {
@@ -108,18 +109,22 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
     *variables.get_mut("eip").unwrap() += 1;
 }
 
-fn load_from_memory(memory: &[u8; 64], address: i32) -> i32 {
+fn load_from_memory(memory: &[u8; 128], address: i32) -> i32 {
     let address = address as usize;
     let mut value: [u8; 4] = Default::default();
     value.copy_from_slice(&memory[address..address + 4]);
     i32::from_be_bytes(value)
 }
 
-fn store_to_memory(memory: &mut [u8; 64], address: i32, value: i32) {
+fn store_to_memory(memory: &mut [u8; 128], address: i32, value: i32, byte_count: usize) {
     let address = address as usize;
     let bytes = value.to_be_bytes();
-    for i in 0..4 {
-        memory[address + i] = bytes[i];
+    for i in 0..byte_count {
+        let val = bytes[i + (4-byte_count)];
+        print!("\x1b[33m");
+        print!("memory[{:#04x}] = {} {}", address + i, val, val as char);
+        println!("\x1b[0m");
+        memory[address + i] = val;
     }
 }
 
@@ -127,7 +132,7 @@ fn parse_immediate(str: &str) -> i32 {
     if str.starts_with("0x") {
         return parse_hex_string(str);
     }
-    str.parse::<i32>().unwrap()
+    str.parse::<i32>().expect("Expected a numeric value!")
 }
 
 fn parse_hex_string(str: &str) -> i32 {
@@ -178,7 +183,7 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
     split_string[0].parse::<i32>().unwrap() + variables[reg]
 }
 
-fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 64]) {
+fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 128]) {
     for i in ((variables["sp"]/4))..(memory.len()/4) as i32 {
         println!("{:#04x}│{}", i*4, load_from_memory(memory, i*4));
     }
@@ -282,8 +287,9 @@ fn main() {
     let (program, entry_point) = compile(content);
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut memory: [u8; 64] = [0; 64];
+    let mut memory: [u8; 128] = [0; 128];
     let mut variables: HashMap<&str, i32> = HashMap::new();
+    variables.insert("zero", 0);
     variables.insert("ra", random_data());
     variables.insert("sp", memory.len() as i32);
     variables.insert("ZF", random_data());
