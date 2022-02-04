@@ -16,7 +16,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 128]) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 256]) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -41,7 +41,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let b = variables[params[2].trim()];
             *variables.get_mut(params[0]).unwrap() = a + b;
         },
-        "addi" => {
+        "addi" | "addiw" => {
             let a = variables[params[1].trim()];
             let b = params[2].trim().parse::<i32>().unwrap();
             *variables.get_mut(params[0]).unwrap() = a + b;
@@ -86,18 +86,40 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
+        "ble" => {
+            let a = variables[params[0].trim()];
+            let b = variables[params[1].trim()];
+            if a <= b {
+                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
+        "blt" => {
+            let a = variables[params[0].trim()];
+            let b = variables[params[1].trim()];
+            if a < b {
+                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
         "ret" => {
             *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
         },
-        "slliw" => {
+        "slli" | "slliw" => {
             let a = variables[params[1].trim()];
             let b = parse_immediate(params[2].trim());
             *variables.get_mut(params[0]).unwrap() = a << b;
         },
-        "slriw" => {
+        "srli" | "slriw" => {
             let a = variables[params[1].trim()];
             let b = parse_immediate(params[2].trim());
-            *variables.get_mut(params[0]).unwrap() = a >> b;
+            //*variables.get_mut(params[0]).unwrap() = a >> b;
+            *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0);
+        },
+        "or" => {
+            let a = variables[params[1].trim()];
+            let b = variables[params[2].trim()];
+            *variables.get_mut(params[0]).unwrap() = a & b;
         },
         "sext.w" => {
             let a = variables[params[1].trim()];
@@ -109,20 +131,20 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
     *variables.get_mut("eip").unwrap() += 1;
 }
 
-fn load_from_memory(memory: &[u8; 128], address: i32) -> i32 {
+fn load_from_memory(memory: &[u8; 256], address: i32) -> i32 {
     let address = address as usize;
     let mut value: [u8; 4] = Default::default();
     value.copy_from_slice(&memory[address..address + 4]);
     i32::from_be_bytes(value)
 }
 
-fn store_to_memory(memory: &mut [u8; 128], address: i32, value: i32, byte_count: usize) {
+fn store_to_memory(memory: &mut [u8; 256], address: i32, value: i32, byte_count: usize) {
     let address = address as usize;
     let bytes = value.to_be_bytes();
     for i in 0..byte_count {
         let val = bytes[i + (4-byte_count)];
         print!("\x1b[33m");
-        print!("memory[{:#04x}] = {} {}", address + i, val, val as char);
+        print!("memory[{:#04x}] = {} '{}'", address + i, val, val as char);
         println!("\x1b[0m");
         memory[address + i] = val;
     }
@@ -183,7 +205,7 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
     split_string[0].parse::<i32>().unwrap() + variables[reg]
 }
 
-fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 128]) {
+fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 256]) {
     for i in ((variables["sp"]/4))..(memory.len()/4) as i32 {
         println!("{:#04x}│{}", i*4, load_from_memory(memory, i*4));
     }
@@ -287,7 +309,7 @@ fn main() {
     let (program, entry_point) = compile(content);
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut memory: [u8; 128] = [0; 128];
+    let mut memory: [u8; 256] = [0; 256];
     let mut variables: HashMap<&str, i32> = HashMap::new();
     variables.insert("zero", 0);
     variables.insert("ra", random_data());
@@ -308,14 +330,27 @@ fn main() {
     variables.insert("a6", random_data());
     variables.insert("a7", random_data());
 
+    variables.insert("s2", random_data());
+    variables.insert("s3", random_data());
+    variables.insert("s4", random_data());
+    variables.insert("s5", random_data());
+    variables.insert("s6", random_data());
+    variables.insert("s7", random_data());
+    variables.insert("s8", random_data());
+    variables.insert("s9", random_data());
+    variables.insert("s10", random_data());
+    variables.insert("s11", random_data());
+
     let start = Instant::now();
+    let mut ins_executed = 0;
     let mut eip = variables["eip"]  as usize;
     while eip < program.len() {
         let ins = &program[eip][..];
         println!("{}", ins);
         evaluate(ins, &mut variables, &mut memory);
         eip = variables["eip"]  as usize;
-        
+        ins_executed += 1;
+
         if debug {
             for i in 0..program.len() {
                 if i == eip {
@@ -346,7 +381,7 @@ fn main() {
         }
     }
     let duration = start.elapsed();
-    println!("Total time elapsed: {}ms, {}ns", duration.as_millis(), duration.as_nanos());
+    println!("Total time elapsed: {}ms, {}ns | Executed {} instructions", duration.as_millis(), duration.as_nanos(), ins_executed);
 
     loop {
         let ins = &promt("$ ")[..];
