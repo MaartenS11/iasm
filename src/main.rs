@@ -16,7 +16,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 256]) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 1024]) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -47,16 +47,20 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             *variables.get_mut(params[0]).unwrap() = a + b;
         },
         "sub" => {
-            let a = *variables.get_mut(params[0].trim()).unwrap();
-            let b = *variables.get_mut(params[1].trim()).unwrap();
+            let a = *variables.get_mut(params[1].trim()).unwrap();
+            let b = *variables.get_mut(params[2].trim()).unwrap();
             let result = a - b;
             *variables.get_mut(params[0]).unwrap() = result;
-            *variables.get_mut("ZF").unwrap() = (result == 0) as i32;
         },
         "mulw" => {
             let a = variables[params[1].trim()];
             let b = variables[params[2].trim()];
             *variables.get_mut(params[0]).unwrap() = a * b;
+        },
+        "divw" => {
+            let a = variables[params[1].trim()];
+            let b = variables[params[2].trim()];
+            *variables.get_mut(params[0]).unwrap() = a / b;
         },
         "nop" => (),
         "j" => {
@@ -102,6 +106,13 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
+        "bnez" => {
+            let a = variables[params[0].trim()];
+            if a != 0 {
+                let jump_pos: i32 = params[1].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
         "ret" => {
             *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
         },
@@ -112,7 +123,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         },
         "srli" | "slriw" => {
             let a = variables[params[1].trim()];
-            let b = parse_immediate(params[2].trim());
+            let b = parse_immediate(params[2].trim()) & 0b11111;
             //*variables.get_mut(params[0]).unwrap() = a >> b;
             *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0);
         },
@@ -131,18 +142,19 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
     *variables.get_mut("eip").unwrap() += 1;
 }
 
-fn load_from_memory(memory: &[u8; 256], address: i32) -> i32 {
+fn load_from_memory(memory: &[u8; 1024], address: i32) -> i32 {
     let address = address as usize;
     let mut value: [u8; 4] = Default::default();
     value.copy_from_slice(&memory[address..address + 4]);
-    i32::from_be_bytes(value)
+    i32::from_le_bytes(value)
 }
 
-fn store_to_memory(memory: &mut [u8; 256], address: i32, value: i32, byte_count: usize) {
+fn store_to_memory(memory: &mut [u8; 1024], address: i32, value: i32, byte_count: usize) {
     let address = address as usize;
-    let bytes = value.to_be_bytes();
+    let bytes = value.to_le_bytes();
+    //println!("{} {} {} {}", bytes[0], bytes[1], bytes[2], bytes[3]);
     for i in 0..byte_count {
-        let val = bytes[i + (4-byte_count)];
+        let val = bytes[i];
         print!("\x1b[33m");
         print!("memory[{:#04x}] = {} '{}'", address + i, val, val as char);
         println!("\x1b[0m");
@@ -202,10 +214,11 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
     }
     let split_string:Vec<&str> = str.split('(').collect();
     let reg = &split_string[1][..split_string[1].len()-1];
+    assert!(variables[reg] >= 0, "{} < 0", reg);
     split_string[0].parse::<i32>().unwrap() + variables[reg]
 }
 
-fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 256]) {
+fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 1024]) {
     for i in ((variables["sp"]/4))..(memory.len()/4) as i32 {
         println!("{:#04x}│{}", i*4, load_from_memory(memory, i*4));
     }
@@ -309,15 +322,17 @@ fn main() {
     let (program, entry_point) = compile(content);
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut memory: [u8; 256] = [0; 256];
+    let mut memory: [u8; 1024] = [0; 1024];
     let mut variables: HashMap<&str, i32> = HashMap::new();
     variables.insert("zero", 0);
     variables.insert("ra", random_data());
     variables.insert("sp", memory.len() as i32);
-    variables.insert("ZF", random_data());
-    variables.insert("SF", random_data());
     variables.insert("eip", entry_point);
     
+    variables.insert("t0", random_data());
+    variables.insert("t1", random_data());
+    variables.insert("t2", random_data());
+
     variables.insert("s0", random_data());
     variables.insert("s1", random_data());
     
@@ -340,6 +355,11 @@ fn main() {
     variables.insert("s9", random_data());
     variables.insert("s10", random_data());
     variables.insert("s11", random_data());
+
+    variables.insert("t3", random_data());
+    variables.insert("t4", random_data());
+    variables.insert("t5", random_data());
+    variables.insert("t6", random_data());
 
     let start = Instant::now();
     let mut ins_executed = 0;
