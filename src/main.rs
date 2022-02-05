@@ -31,6 +31,10 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
     match instruction_name {
         "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
         "lw" | "ld" => *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, parse_memory_location(variables, params[1].trim())),
+        "lbu" => {
+            let address = parse_memory_location(variables, params[1].trim());
+            *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, address) & 0xff;
+        },
         "li" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
         "sw" | "sd" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
         "sb" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
@@ -46,7 +50,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let b = params[2].trim().parse::<i32>().unwrap();
             *variables.get_mut(params[0]).unwrap() = a + b;
         },
-        "sub" => {
+        "sub" | "subw" => {
             let a = *variables.get_mut(params[1].trim()).unwrap();
             let b = *variables.get_mut(params[2].trim()).unwrap();
             let result = a - b;
@@ -86,6 +90,14 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[0].trim()];
             let b = variables[params[1].trim()];
             if a != b {
+                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
+        "beq" => {
+            let a = variables[params[0].trim()];
+            let b = variables[params[1].trim()];
+            if a == b {
                 let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
@@ -130,12 +142,31 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         "or" => {
             let a = variables[params[1].trim()];
             let b = variables[params[2].trim()];
+            *variables.get_mut(params[0]).unwrap() = a | b;
+        },
+        "andi" => {
+            let a = variables[params[1].trim()];
+            let b = parse_immediate(params[2].trim());
             *variables.get_mut(params[0]).unwrap() = a & b;
         },
         "sext.w" => {
             let a = variables[params[1].trim()];
             *variables.get_mut(params[0]).unwrap() = a;
         },
+        "ecall" => {
+            if variables["a7"] == 4 {
+                let fd = variables["a0"];
+                let buf = variables["a1"];
+                let count = variables["a2"];
+                print!("\x1b[34m");
+                print!("syscall: write(fd = {}, *buf = {:#x}, count = {})", fd, buf, count);
+                println!("\x1b[0m");
+                for i in buf..buf+count {
+                    let c = memory[i as usize] as char;
+                    print!("{}", c);
+                }
+            }
+        }
         _ => panic!("Instruction \"{}\" does not exist!", instruction_name)
     }
 
