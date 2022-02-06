@@ -1,9 +1,12 @@
 use core::panic;
 use std::collections::HashMap;
 use std::io::{self, Write};
+use std::path::Iter;
 use std::{fs, process};
 use std::time::Instant;
 use std::env;
+use std::ops::{Index, IndexMut};
+use std::ops::Range;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -16,7 +19,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut [u8; 1024]) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut Memory) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -30,14 +33,14 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 
     match instruction_name {
         "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "lw" | "ld" => *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, parse_memory_location(variables, params[1].trim())),
+        "lw" | "ld" => *variables.get_mut(params[0]).unwrap() = memory.load_from_memory(parse_memory_location(variables, params[1].trim())),
         "lbu" => {
             let address = parse_memory_location(variables, params[1].trim());
-            *variables.get_mut(params[0]).unwrap() = load_from_memory(memory, address) & 0xff;
+            *variables.get_mut(params[0]).unwrap() = memory.load_from_memory(address) & 0xff;
         },
         "li" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
-        "sw" | "sd" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
-        "sb" => store_to_memory(memory, parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
+        "sw" | "sd" => memory.store_to_memory(parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
+        "sb" => memory.store_to_memory(parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
         "add" | "addw" => {
@@ -154,17 +157,28 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             *variables.get_mut(params[0]).unwrap() = a;
         },
         "ecall" => {
-            if variables["a7"] == 4 {
-                let fd = variables["a0"];
-                let buf = variables["a1"];
-                let count = variables["a2"];
-                print!("\x1b[34m");
-                print!("syscall: write(fd = {}, *buf = {:#x}, count = {})", fd, buf, count);
-                println!("\x1b[0m");
-                for i in buf..buf+count {
-                    let c = memory[i as usize] as char;
-                    print!("{}", c);
-                }
+            let syscall_nr = variables["a7"];
+            match syscall_nr {
+                4 => {
+                    let fd = variables["a0"];
+                    let buf = variables["a1"];
+                    let count = variables["a2"];
+                    print!("\x1b[34m");
+                    print!("syscall: write(fd = {}, *buf = {:#x}, count = {})", fd, buf, count);
+                    println!("\x1b[0m");
+                    for i in buf..buf+count {
+                        let c = memory[i as usize] as char;
+                        print!("{}", c);
+                    }
+                },
+                45 => {
+                    let addr = variables["a0"];
+                    print!("\x1b[34m");
+                    print!("syscall: brk(*addr = {:#x})", addr);
+                    println!("\x1b[0m");
+                    memory.program_break = addr as usize;
+                },
+                _ => panic!("Syscall {} is not supported", syscall_nr)
             }
         }
         _ => panic!("Instruction \"{}\" does not exist!", instruction_name)
@@ -173,23 +187,57 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
     *variables.get_mut("eip").unwrap() += 1;
 }
 
-fn load_from_memory(memory: &[u8; 1024], address: i32) -> i32 {
-    let address = address as usize;
-    let mut value: [u8; 4] = Default::default();
-    value.copy_from_slice(&memory[address..address + 4]);
-    i32::from_le_bytes(value)
+struct Memory {
+    stack_memory: [u8; 1024],
+    program_break: usize
 }
 
-fn store_to_memory(memory: &mut [u8; 1024], address: i32, value: i32, byte_count: usize) {
-    let address = address as usize;
-    let bytes = value.to_le_bytes();
-    //println!("{} {} {} {}", bytes[0], bytes[1], bytes[2], bytes[3]);
-    for i in 0..byte_count {
-        let val = bytes[i];
-        print!("\x1b[33m");
-        print!("memory[{:#04x}] = {} '{}'", address + i, val, val as char);
-        println!("\x1b[0m");
-        memory[address + i] = val;
+impl Memory {
+    fn new() -> Self {
+        Memory {
+            stack_memory: [0; 1024],
+            program_break: 0
+        }
+    }
+
+    fn load_from_memory(&self, address: i32) -> i32 {
+        let address = address as usize;
+        let mut value: [u8; 4] = Default::default();
+        value.copy_from_slice(&self[address..address + 4]);
+        i32::from_le_bytes(value)
+    }
+
+    fn store_to_memory(&mut self, address: i32, value: i32, byte_count: usize) {
+        let address = address as usize;
+        let bytes = value.to_le_bytes();
+        //println!("{} {} {} {}", bytes[0], bytes[1], bytes[2], bytes[3]);
+        for i in 0..byte_count {
+            let val = bytes[i];
+            print!("\x1b[33m");
+            print!("memory[{:#04x}] = {} '{}'", address + i, val, val as char);
+            println!("\x1b[0m");
+            self[address + i] = val;
+        }
+    }
+}
+
+impl Index<usize> for Memory {
+    type Output = u8;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.stack_memory[index]
+    }
+}
+
+impl Index<Range<usize>> for Memory {
+    type Output = [u8];
+    fn index(&self, range: Range<usize>) -> &Self::Output {
+        &self.stack_memory[range]
+    }
+}
+
+impl IndexMut<usize> for Memory {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.stack_memory[index]
     }
 }
 
@@ -249,9 +297,9 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
     split_string[0].parse::<i32>().unwrap() + variables[reg]
 }
 
-fn print_stack(variables: &HashMap<&str, i32>, memory: &[u8; 1024]) {
-    for i in ((variables["sp"]/4))..(memory.len()/4) as i32 {
-        println!("{:#04x}│{}", i*4, load_from_memory(memory, i*4));
+fn print_stack(variables: &HashMap<&str, i32>, memory: &Memory) {
+    for i in ((variables["sp"]/4))..(memory.stack_memory.len()/4) as i32 {
+        println!("{:#04x}│{}", i*4, memory.load_from_memory(i*4));
     }
 }
 
@@ -353,11 +401,11 @@ fn main() {
     let (program, entry_point) = compile(content);
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut memory: [u8; 1024] = [0; 1024];
+    let mut memory = Memory::new();
     let mut variables: HashMap<&str, i32> = HashMap::new();
     variables.insert("zero", 0);
     variables.insert("ra", random_data());
-    variables.insert("sp", memory.len() as i32);
+    variables.insert("sp", memory.stack_memory.len() as i32);
     variables.insert("eip", entry_point);
     
     variables.insert("t0", random_data());
