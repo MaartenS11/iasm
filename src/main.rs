@@ -197,14 +197,12 @@ struct Memory {
 
 impl Memory {
     fn new() -> Self {
-        let mut memory = Memory {
-            stack_memory: Vec::new(),
+        Memory {
+            stack_memory: vec![0; 1024],
             program_break: 0,
             heap_memory:  Vec::new(),
             virtual_memory_size: 4096
-        };
-        memory.stack_memory.resize(1024, 0);
-        memory
+        }
     }
 
     fn load_from(&self, address: i32) -> i32 {
