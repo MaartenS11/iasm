@@ -137,14 +137,23 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             *variables.get_mut(params[0]).unwrap() = a << b;
         },
         "srli" | "slriw" => {
+            let a = variables[params[1].trim()] as u32;
+            let b = parse_immediate(params[2].trim()) & 0b11111;
+            *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0) as i32;
+        },
+        "sraiw" => {
             let a = variables[params[1].trim()];
             let b = parse_immediate(params[2].trim()) & 0b11111;
-            //*variables.get_mut(params[0]).unwrap() = a >> b;
             *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0);
         },
         "or" => {
             let a = variables[params[1].trim()];
             let b = variables[params[2].trim()];
+            *variables.get_mut(params[0]).unwrap() = a | b;
+        },
+        "ori" => {
+            let a = variables[params[1].trim()];
+            let b = parse_immediate(params[2].trim());
             *variables.get_mut(params[0]).unwrap() = a | b;
         },
         "andi" => {
@@ -249,11 +258,19 @@ impl Memory {
         }
         address as usize
     }
+
+    fn is_address_valid(&self, address: usize) -> bool {
+        if self.is_stack_address(address as i32) {
+            return address - (self.virtual_memory_size - self.stack_memory.len()) < 1024
+        }
+        address < self.heap_memory.len()
+    }
 }
 
 impl Index<usize> for Memory {
     type Output = u8;
     fn index(&self, address: usize) -> &Self::Output {
+        assert!(self.is_address_valid(address), "Address {:#x} is not in allocated memory space!", address);
         let index = self.address_to_index(address as i32);
         &self.get_segment_for_address(address as i32)[index]
     }
@@ -262,6 +279,8 @@ impl Index<usize> for Memory {
 impl Index<Range<usize>> for Memory {
     type Output = [u8];
     fn index(&self, range: Range<usize>) -> &Self::Output {
+        assert!(self.is_address_valid(range.start), "Address {:#x} is not in allocated memory space!", range.start);
+        assert!(self.is_address_valid(range.end-1), "Address {:#x} is not in allocated memory space!", range.end);
         let segment = self.get_segment_for_address(range.start as i32);
         if segment != self.get_segment_for_address(range.end as i32) {
             panic!("Range has to be in the same segment!");
@@ -274,6 +293,7 @@ impl Index<Range<usize>> for Memory {
 
 impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, address: usize) -> &mut Self::Output {
+        assert!(self.is_address_valid(address), "Address {:#x} is not in allocated memory space!", address);
         let index = self.address_to_index(address as i32);
         &mut self.get_segment_for_address_mut(address as i32)[index]
     }
