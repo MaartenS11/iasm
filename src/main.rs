@@ -33,10 +33,15 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 
     match instruction_name {
         "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "lw" | "ld" => *variables.get_mut(params[0]).unwrap() = memory.load_from(parse_memory_location(variables, params[1].trim())),
+        "lw" | "lwu" | "ld" => *variables.get_mut(params[0]).unwrap() = memory.load_from(parse_memory_location(variables, params[1].trim())),
         "lbu" => {
             let address = parse_memory_location(variables, params[1].trim());
             *variables.get_mut(params[0]).unwrap() = memory.load_from(address) & 0xff;
+        },
+        "lb" => {
+            let address = parse_memory_location(variables, params[1].trim());
+            let value = (memory.load_from(address) & 0xff) as u8;
+            *variables.get_mut(params[0]).unwrap() = value as i32; // Sign extend.
         },
         "li" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
         "sw" | "sd" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
@@ -59,7 +64,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let result = a - b;
             *variables.get_mut(params[0]).unwrap() = result;
         },
-        "mulw" => {
+        "mul" | "mulw" => {
             let a = variables[params[1].trim()];
             let b = variables[params[2].trim()];
             *variables.get_mut(params[0]).unwrap() = a * b;
@@ -128,13 +133,21 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
+        "bge" => {
+            let a = variables[params[0].trim()];
+            let b = variables[params[1].trim()];
+            if a >= b {
+                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
         "ret" => {
             *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
         },
         "slli" | "slliw" => {
-            let a = variables[params[1].trim()];
-            let b = parse_immediate(params[2].trim());
-            *variables.get_mut(params[0]).unwrap() = a << b;
+            let a = variables[params[1].trim()] as u32;
+            let b = parse_immediate(params[2].trim()) & 0b11111;
+            *variables.get_mut(params[0]).unwrap() = (a << b) as i32;
         },
         "srli" | "slriw" => {
             let a = variables[params[1].trim()] as u32;
@@ -155,6 +168,11 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[1].trim()];
             let b = parse_immediate(params[2].trim());
             *variables.get_mut(params[0]).unwrap() = a | b;
+        },
+        "and" => {
+            let a = variables[params[1].trim()];
+            let b = variables[params[2].trim()];
+            *variables.get_mut(params[0]).unwrap() = a & b;
         },
         "andi" => {
             let a = variables[params[1].trim()];
@@ -378,7 +396,7 @@ fn compile(content: &str) -> (Vec<String>, i32) {
         println!("{:width$}│{}", i, line, width=digit_count);
         
         let line = line.trim().replace('\t', " ");
-        let line = String::from(&line[..line.find('#').unwrap_or_else(|| line.len())]);
+        let line = String::from(line[..line.find('#').unwrap_or_else(|| line.len())].trim());
 
         if line.ends_with(":") {
             jump_tag_map.insert(line[..line.len()-1].to_string(), i - offset);
