@@ -1,3 +1,5 @@
+extern crate unescape;
+
 use core::panic;
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -35,15 +37,14 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
         "lw" | "lwu" | "ld" => *variables.get_mut(params[0]).unwrap() = memory.load_from(parse_memory_location(variables, params[1].trim())),
         "lbu" => {
-            let address = parse_memory_location(variables, params[1].trim());
-            *variables.get_mut(params[0]).unwrap() = memory.load_from(address) & 0xff;
+            let address = parse_memory_location(variables, params[1].trim()) as usize;
+            *variables.get_mut(params[0]).unwrap() = (memory[address] as i32) & 0xff; //Remove sign extension
         },
         "lb" => {
-            let address = parse_memory_location(variables, params[1].trim());
-            let value = (memory.load_from(address) & 0xff) as u8;
-            *variables.get_mut(params[0]).unwrap() = value as i32; // Sign extend.
+            let address = parse_memory_location(variables, params[1].trim()) as usize;
+            *variables.get_mut(params[0]).unwrap() = memory[address] as i32; //Sign extend to i32
         },
-        "li" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
+        "li" | "lla" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
         "sw" | "sd" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
         "sb" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
@@ -385,9 +386,11 @@ fn random_data() -> i32 {
     return ptr as i32;
 }
 
-fn compile(content: &str) -> (Vec<String>, i32) {
+fn compile(content: &str, memory: &mut Memory) -> (Vec<String>, i32, usize) {
     let mut program: Vec<String> = Vec::new();
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
+    let mut last_jump_label: String = Default::default();
+    let mut data_segment_size = 0;
     let lines: Vec<&str> = content.split("\n").collect();
     println!("Total amount of lines: {}", lines.len());
     let digit_count = (lines.len() -1).to_string().len();
@@ -399,10 +402,27 @@ fn compile(content: &str) -> (Vec<String>, i32) {
         let line = String::from(line[..line.find('#').unwrap_or_else(|| line.len())].trim());
 
         if line.ends_with(":") {
-            jump_tag_map.insert(line[..line.len()-1].to_string(), i - offset);
+            last_jump_label = line[..line.len()-1].to_string();
+            jump_tag_map.insert(last_jump_label[..].to_string(), i - offset);
             offset += 1; // We are removing the line with the jump tag.
         }
-        else if line == "" || line.starts_with('#') || line.starts_with('.') {
+        else if line.starts_with('.') {
+            offset += 1;
+            if line.starts_with(".string") {
+                let str = line.split_once(' ').unwrap().1.trim();
+                let str = unescape::unescape(&str[1..str.len()-1]).unwrap();
+                
+                data_segment_size += str.len() + 1;
+                let size = memory.stack_memory.len();
+                for (i, c) in str.char_indices() {
+                    memory.stack_memory[size - data_segment_size + i] = c as u8;
+                }
+                memory.stack_memory[size - data_segment_size + str.len()] = '\0' as u8;
+
+                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - data_segment_size);
+            }
+        }
+        else if line == "" || line.starts_with('#') {
             offset += 1;
         }
         else {
@@ -414,7 +434,7 @@ fn compile(content: &str) -> (Vec<String>, i32) {
         let line = &program[i];
         let (instruction_name, params) = line.split_once(" ").unwrap_or_else(|| (line, ""));
         let (mut instruction_name, mut params) = (instruction_name, String::from(params));
-        if line.starts_with("j") || line.starts_with("call") || line.starts_with('b') {
+        if line.starts_with("j") || line.starts_with("call") || line.starts_with('b') || line.starts_with("lla") {
             if instruction_name == "call" {
                 instruction_name = "jal";
                 params = format!("ra, {}", params);
@@ -450,9 +470,9 @@ fn compile(content: &str) -> (Vec<String>, i32) {
         }
     }
     if jump_tag_map.contains_key("main") {
-        return (program, jump_tag_map["main"] as i32)
+        return (program, jump_tag_map["main"] as i32, data_segment_size)
     }
-    (program, 0)
+    (program, 0, data_segment_size)
 }
 
 fn main() {
@@ -475,14 +495,14 @@ fn main() {
 
     let content = &fs::read_to_string(&args[1][..])
         .expect("Could not read file!")[..];
-    let (program, entry_point) = compile(content);
+    let mut memory = Memory::new();
+    let (program, entry_point, data_segment_size) = compile(content, &mut memory);
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut memory = Memory::new();
     let mut variables: HashMap<&str, i32> = HashMap::new();
     variables.insert("zero", 0);
     variables.insert("ra", random_data());
-    variables.insert("sp", memory.virtual_memory_size as i32);
+    variables.insert("sp", (memory.virtual_memory_size - data_segment_size) as i32);
     variables.insert("eip", entry_point);
     
     variables.insert("t0", random_data());
