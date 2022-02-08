@@ -420,6 +420,11 @@ fn compile(content: &str, memory: &mut Memory) -> (Vec<String>, i32, usize) {
                 memory.stack_memory[size - data_segment_size + str.len()] = '\0' as u8;
 
                 jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - data_segment_size);
+            } else if line.starts_with(".zero") {
+                let size = line.split_once(' ').unwrap().1.trim().parse::<usize>().unwrap();
+
+                data_segment_size += size;
+                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - data_segment_size);
             }
         }
         else if line == "" || line.starts_with('#') {
