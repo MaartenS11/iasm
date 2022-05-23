@@ -453,17 +453,21 @@ fn random_data() -> i64 {
     return ptr as i64;
 }
 
-fn compile(content: &str, memory: &mut Memory) -> (Vec<String>, i64, usize) {
+fn compile(content: &str, memory: &mut Memory, verbose: bool) -> (Vec<String>, i64, usize) {
     let mut program: Vec<String> = Vec::new();
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let mut last_jump_label: String = Default::default();
     let mut data_segment_size = 0;
     let lines: Vec<&str> = content.split("\n").collect();
-    println!("Total amount of lines: {}", lines.len());
+    if verbose {
+        println!("Total amount of lines: {}", lines.len());
+    }
     let digit_count = (lines.len() -1).to_string().len();
     let mut offset = 0;
     for (i, line) in lines.iter().enumerate() {
-        println!("{:width$}│{}", i, line, width=digit_count);
+        if verbose {
+            println!("{:width$}│{}", i, line, width=digit_count);
+        }
         
         let line = line.trim().replace('\t', " ");
         let line = String::from(line[..line.find('#').unwrap_or_else(|| line.len())].trim());
@@ -566,11 +570,12 @@ fn main() {
         }
     }
 
+    let verbose = true;
+
     let content = &fs::read_to_string(&args[1][..])
         .expect("Could not read file!")[..];
-    let verbose = true;
     let mut memory = Memory::new(verbose);
-    let (program, entry_point, data_segment_size) = compile(content, &mut memory);
+    let (program, entry_point, data_segment_size) = compile(content, &mut memory, verbose);
     let digit_count = (program.len() -1).to_string().len();
 
     let mut variables: HashMap<&str, i64> = HashMap::new();
