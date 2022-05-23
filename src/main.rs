@@ -555,6 +555,7 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool) -> (Vec<String>, i
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut debug = false;
+    let mut verbose = false;
     if args.len() < 2 {
         eprintln!("Expected at least one argument!");
         process::exit(1);
@@ -562,15 +563,17 @@ fn main() {
     
     if args.len() >= 3 {
         match &args[2][..] {
-            "debug" => debug = true,
+            "debug" => {
+                debug = true;
+                verbose = true;
+            },
+            "verbose" => verbose = true,
             _ => {
                 eprintln!("Argument \"{}\" is not a valid option", args[2]);
                 process::exit(1);
             }
         }
     }
-
-    let verbose = true;
 
     let content = &fs::read_to_string(&args[1][..])
         .expect("Could not read file!")[..];
