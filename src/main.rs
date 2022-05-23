@@ -438,13 +438,20 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i64>, str: &'a str) ->
 
 fn print_stack(variables: &HashMap<&str, i64>, memory: &Memory) {
     let stack_offset = (memory.virtual_memory_size - memory.stack_memory.len()) as i64;
-    for i in (((variables["sp"] - stack_offset)/4))..(memory.stack_memory.len()/4) as i64 {
-        let address = (i*4 + stack_offset) as usize;
-        print!("{:#04x}│{}", i*4 + stack_offset, memory.load_from(i*4 + stack_offset));
+    for i in (((variables["sp"] - stack_offset)/8))..(memory.stack_memory.len()/8) as i64 {
+        let address = (i*8 + stack_offset) as usize;
+        print!("{:#04x}│{}", i*8 + stack_offset, memory.load_from(i*8 + stack_offset));
 
-        let char_ar = [memory[address] as char, memory[address + 1] as char, memory[address + 2] as char, memory[address + 3] as char];
-        let str: String = char_ar.iter().collect();
-        println!(" {}", str);
+        let char_ar = [memory[address] as char, memory[address + 1] as char, memory[address + 2] as char, memory[address + 3] as char, memory[address + 4] as char, memory[address + 5] as char, memory[address + 6] as char, memory[address + 7] as char];
+        print!(" ");
+        for char in char_ar {
+            if char == '\n' {
+                print!("\\n");
+            } else {
+                print!("{}", char);
+            }
+        }
+        println!();
     }
 }
 
