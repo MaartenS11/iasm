@@ -441,6 +441,10 @@ fn print_stack(variables: &HashMap<&str, i64>, memory: &Memory) {
     for i in (((variables["sp"] - stack_offset)/8))..(memory.stack_memory.len()/8) as i64 {
         let address = (i*8 + stack_offset) as usize;
         print!("{:#04x}│{}", i*8 + stack_offset, memory.load_from(i*8 + stack_offset));
+        print!(" ");
+        for j in 0..8 {
+            print!("{:02x} ", memory[(i*8 + stack_offset + j) as usize]);
+        }
 
         let char_ar = [memory[address] as char, memory[address + 1] as char, memory[address + 2] as char, memory[address + 3] as char, memory[address + 4] as char, memory[address + 5] as char, memory[address + 6] as char, memory[address + 7] as char];
         print!(" ");
