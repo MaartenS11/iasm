@@ -44,8 +44,13 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let address = parse_memory_location(variables, params[1].trim()) as usize;
             *variables.get_mut(params[0]).unwrap() = memory[address] as i32; //Sign extend to i32
         },
+        "lhu" => {
+            let address = parse_memory_location(variables, params[1].trim()) as usize;
+            *variables.get_mut(params[0]).unwrap() = ((memory[address] as u32 | (memory[address+1] as u32) << 8) as i32) & 0xffff; //Remove sign extension
+        },
         "li" | "lla" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
         "sw" | "sd" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
+        "sh" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 2),
         "sb" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
         "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
@@ -74,6 +79,10 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[1].trim()];
             let b = variables[params[2].trim()];
             *variables.get_mut(params[0]).unwrap() = a / b;
+        },
+        "negw" => {
+            let a = variables[params[1].trim()];
+            *variables.get_mut(params[0]).unwrap() = -a; //subw rd, x0, rs
         },
         "nop" => (),
         "j" => {
@@ -142,6 +151,36 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
+        "bgtz" => {
+            let a = variables[params[0].trim()];
+            if a > 0 {
+                let jump_pos: i32 = params[1].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
+        "bgez" => {
+            let a = variables[params[0].trim()];
+            if a >= 0 {
+                let jump_pos: i32 = params[1].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
+        "bgtu" => {
+            let a = variables[params[0].trim()] as u32;
+            let b = variables[params[1].trim()] as u32;
+            if a > b {
+                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
+        "bltu" => {
+            let a = variables[params[0].trim()] as u32;
+            let b = variables[params[1].trim()] as u32;
+            if a < b {
+                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            }
+        },
         "ret" => {
             *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
         },
@@ -179,6 +218,11 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[1].trim()];
             let b = parse_immediate(params[2].trim());
             *variables.get_mut(params[0]).unwrap() = a & b;
+        },
+        "remw" => {
+            let a = variables[params[1].trim()];
+            let b = variables[params[2].trim()];
+            *variables.get_mut(params[0]).unwrap() = a % b;
         },
         "sext.w" => {
             let a = variables[params[1].trim()];
@@ -226,7 +270,7 @@ struct Memory {
 impl Memory {
     fn new() -> Self {
         Memory {
-            stack_memory: vec![0; 1024],
+            stack_memory: vec![0; 2048],
             program_break: 0,
             heap_memory:  Vec::new(),
             virtual_memory_size: 4096
@@ -280,7 +324,7 @@ impl Memory {
 
     fn is_address_valid(&self, address: usize) -> bool {
         if self.is_stack_address(address as i32) {
-            return address - (self.virtual_memory_size - self.stack_memory.len()) < 1024
+            return address - (self.virtual_memory_size - self.stack_memory.len()) < self.stack_memory.len()
         }
         address < self.heap_memory.len()
     }
@@ -377,7 +421,12 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
 fn print_stack(variables: &HashMap<&str, i32>, memory: &Memory) {
     let stack_offset = (memory.virtual_memory_size - memory.stack_memory.len()) as i32;
     for i in (((variables["sp"] - stack_offset)/4))..(memory.stack_memory.len()/4) as i32 {
-        println!("{:#04x}│{}", i*4 + stack_offset, memory.load_from(i*4 + stack_offset));
+        let address = (i*4 + stack_offset) as usize;
+        print!("{:#04x}│{}", i*4 + stack_offset, memory.load_from(i*4 + stack_offset));
+
+        let char_ar = [memory[address] as char, memory[address + 1] as char, memory[address + 2] as char, memory[address + 3] as char];
+        let str: String = char_ar.iter().collect();
+        println!(" {}", str);
     }
 }
 
@@ -446,6 +495,7 @@ fn compile(content: &str, memory: &mut Memory) -> (Vec<String>, i32, usize) {
             }
             let params: Vec<&str> = params.split(',').collect();
             let label = params[params.len()-1].trim();
+            let label = label.strip_suffix("@plt").unwrap_or(label);
             if jump_tag_map.contains_key(label) {
                 let mut ins = instruction_name.to_owned() + " ";
                 for i in 0..params.len()-1 {
