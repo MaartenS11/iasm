@@ -21,7 +21,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i64>, memory: &mut Memory) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i64>, memory: &mut Memory, verbose: bool) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -244,9 +244,12 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
                     let fd = variables["a0"];
                     let buf = variables["a1"];
                     let count = variables["a2"];
-                    print!("\x1b[34m");
-                    print!("syscall: write(fd = {}, *buf = {:#x}, count = {})", fd, buf, count);
-                    println!("\x1b[0m");
+                    if verbose {
+                        print!("\x1b[34m");
+                        print!("syscall: write(fd = {}, *buf = {:#x}, count = {})", fd, buf, count);
+                        println!("\x1b[0m");
+                    }
+
                     for i in buf..buf+count {
                         let c = memory[i as usize] as char;
                         print!("{}", c);
@@ -254,9 +257,11 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
                 },
                 45 => {
                     let addr = variables["a0"] as usize;
-                    print!("\x1b[34m");
-                    print!("syscall: brk(*addr = {:#x})", addr);
-                    println!("\x1b[0m");
+                    if verbose {
+                        print!("\x1b[34m");
+                        print!("syscall: brk(*addr = {:#x})", addr);
+                        println!("\x1b[0m");
+                    }
                     memory.program_break = addr as usize;
                     memory.heap_memory.resize(addr, 0);
                 },
@@ -273,16 +278,18 @@ struct Memory {
     stack_memory: Vec<u8>,
     program_break: usize,
     heap_memory: Vec<u8>,
-    virtual_memory_size: usize
+    virtual_memory_size: usize,
+    verbose: bool
 }
 
 impl Memory {
-    fn new() -> Self {
+    fn new(verbose: bool) -> Self {
         Memory {
             stack_memory: vec![0; 2048],
             program_break: 0,
             heap_memory:  Vec::new(),
-            virtual_memory_size: 4096
+            virtual_memory_size: 4096,
+            verbose: verbose
         }
     }
 
@@ -299,9 +306,11 @@ impl Memory {
         //println!("{} {} {} {}", bytes[0], bytes[1], bytes[2], bytes[3]);
         for i in 0..byte_count {
             let val = bytes[i];
-            print!("\x1b[33m");
-            print!("memory[{:#04x}] = {} '{}'", address + i, val, val as char);
-            println!("\x1b[0m");
+            if self.verbose {
+                print!("\x1b[33m");
+                print!("memory[{:#04x}] = {} '{}'", address + i, val, val as char);
+                println!("\x1b[0m");
+            }
             self[address + i] = val;
         }
     }
@@ -559,7 +568,8 @@ fn main() {
 
     let content = &fs::read_to_string(&args[1][..])
         .expect("Could not read file!")[..];
-    let mut memory = Memory::new();
+    let verbose = true;
+    let mut memory = Memory::new(verbose);
     let (program, entry_point, data_segment_size) = compile(content, &mut memory);
     let digit_count = (program.len() -1).to_string().len();
 
@@ -606,8 +616,10 @@ fn main() {
     let mut eip = variables["eip"]  as usize;
     while eip < program.len() {
         let ins = &program[eip][..];
-        println!("{}", ins);
-        evaluate(ins, &mut variables, &mut memory);
+        if verbose {
+            println!("{}", ins);
+        }
+        evaluate(ins, &mut variables, &mut memory, verbose);
         eip = variables["eip"]  as usize;
         ins_executed += 1;
 
@@ -654,7 +666,7 @@ fn main() {
                 print_stack(&variables, &memory);
             }
             "exit" => break,
-            _ => evaluate(ins, &mut variables, &mut memory)
+            _ => evaluate(ins, &mut variables, &mut memory, verbose)
         }
     }
 }
