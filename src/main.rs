@@ -21,7 +21,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i32>, memory: &mut Memory) {
+fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i64>, memory: &mut Memory) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -35,21 +35,30 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
 
     match instruction_name {
         "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "lw" | "lwu" | "ld" => *variables.get_mut(params[0]).unwrap() = memory.load_from(parse_memory_location(variables, params[1].trim())),
+        "ld" => *variables.get_mut(params[0]).unwrap() = memory.load_from(parse_memory_location(variables, params[1].trim())),
+        //"lw" => *variables.get_mut(params[0]).unwrap() = (memory.load_from(parse_memory_location(variables, params[1].trim())) as i32) as i64,
+        "lw" => {
+            let address = parse_memory_location(variables, params[1].trim()) as usize;
+            let mut value: [u8; 4] = Default::default();
+            value.copy_from_slice(&memory[address..address + 4]);
+            *variables.get_mut(params[0]).unwrap() = i32::from_le_bytes(value) as i64
+        },
+        "lwu" => *variables.get_mut(params[0]).unwrap() = (memory.load_from(parse_memory_location(variables, params[1].trim())) as u32) as i64,
         "lbu" => {
             let address = parse_memory_location(variables, params[1].trim()) as usize;
-            *variables.get_mut(params[0]).unwrap() = (memory[address] as i32) & 0xff; //Remove sign extension
+            *variables.get_mut(params[0]).unwrap() = (memory[address] as i64) & 0xff; //Remove sign extension
         },
         "lb" => {
             let address = parse_memory_location(variables, params[1].trim()) as usize;
-            *variables.get_mut(params[0]).unwrap() = memory[address] as i32; //Sign extend to i32
+            *variables.get_mut(params[0]).unwrap() = memory[address] as i64; //Sign extend to i64
         },
         "lhu" => {
             let address = parse_memory_location(variables, params[1].trim()) as usize;
-            *variables.get_mut(params[0]).unwrap() = ((memory[address] as u32 | (memory[address+1] as u32) << 8) as i32) & 0xffff; //Remove sign extension
+            *variables.get_mut(params[0]).unwrap() = ((memory[address] as u64 | (memory[address+1] as u64) << 8) as i64) & 0xffff; //Remove sign extension
         },
         "li" | "lla" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
-        "sw" | "sd" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
+        "sd" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 8),
+        "sw" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
         "sh" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 2),
         "sb" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
         "inc" => *variables.get_mut(params[0]).unwrap() += 1,
@@ -61,7 +70,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
         },
         "addi" | "addiw" => {
             let a = variables[params[1].trim()];
-            let b = params[2].trim().parse::<i32>().unwrap();
+            let b = params[2].trim().parse::<i64>().unwrap();
             *variables.get_mut(params[0]).unwrap() = a + b;
         },
         "sub" | "subw" => {
@@ -100,7 +109,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             *variables.get_mut("eip").unwrap() = jump_pos - 1;
         }
         "jal" => {
-            let jump_pos: i32 = params[params.len()-1].trim().parse().expect("Expected address!");
+            let jump_pos: i64 = params[params.len()-1].trim().parse().expect("Expected address!");
             *variables.get_mut(params[0]).unwrap() = variables["eip"] + 1;
             *variables.get_mut("eip").unwrap() = jump_pos - 1;
         },
@@ -108,7 +117,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[0].trim()];
             let b = variables[params[1].trim()];
             if a != b {
-                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
@@ -116,7 +125,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[0].trim()];
             let b = variables[params[1].trim()];
             if a == b {
-                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
@@ -124,7 +133,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[0].trim()];
             let b = variables[params[1].trim()];
             if a <= b {
-                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
@@ -132,14 +141,14 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[0].trim()];
             let b = variables[params[1].trim()];
             if a < b {
-                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
         "bnez" => {
             let a = variables[params[0].trim()];
             if a != 0 {
-                let jump_pos: i32 = params[1].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[1].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
@@ -147,37 +156,37 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             let a = variables[params[0].trim()];
             let b = variables[params[1].trim()];
             if a >= b {
-                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
         "bgtz" => {
             let a = variables[params[0].trim()];
             if a > 0 {
-                let jump_pos: i32 = params[1].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[1].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
         "bgez" => {
             let a = variables[params[0].trim()];
             if a >= 0 {
-                let jump_pos: i32 = params[1].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[1].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
         "bgtu" => {
-            let a = variables[params[0].trim()] as u32;
-            let b = variables[params[1].trim()] as u32;
+            let a = variables[params[0].trim()] as u64;
+            let b = variables[params[1].trim()] as u64;
             if a > b {
-                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
         "bltu" => {
-            let a = variables[params[0].trim()] as u32;
-            let b = variables[params[1].trim()] as u32;
+            let a = variables[params[0].trim()] as u64;
+            let b = variables[params[1].trim()] as u64;
             if a < b {
-                let jump_pos: i32 = params[2].trim().parse().expect("Expected address!");
+                let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
                 *variables.get_mut("eip").unwrap() = jump_pos - 1;
             }
         },
@@ -185,14 +194,14 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i3
             *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
         },
         "slli" | "slliw" => {
-            let a = variables[params[1].trim()] as u32;
+            let a = variables[params[1].trim()] as u64;
             let b = parse_immediate(params[2].trim()) & 0b11111;
-            *variables.get_mut(params[0]).unwrap() = (a << b) as i32;
+            *variables.get_mut(params[0]).unwrap() = (a << b) as i64;
         },
         "srli" | "slriw" => {
-            let a = variables[params[1].trim()] as u32;
+            let a = variables[params[1].trim()] as u64;
             let b = parse_immediate(params[2].trim()) & 0b11111;
-            *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0) as i32;
+            *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0) as i64;
         },
         "sraiw" => {
             let a = variables[params[1].trim()];
@@ -277,14 +286,14 @@ impl Memory {
         }
     }
 
-    fn load_from(&self, address: i32) -> i32 {
+    fn load_from(&self, address: i64) -> i64 {
         let address = address as usize;
-        let mut value: [u8; 4] = Default::default();
-        value.copy_from_slice(&self[address..address + 4]);
-        i32::from_le_bytes(value)
+        let mut value: [u8; 8] = Default::default();
+        value.copy_from_slice(&self[address..address + 8]);
+        i64::from_le_bytes(value)
     }
 
-    fn store_to(&mut self, address: i32, value: i32, byte_count: usize) {
+    fn store_to(&mut self, address: i64, value: i64, byte_count: usize) {
         let address = address as usize;
         let bytes = value.to_le_bytes();
         //println!("{} {} {} {}", bytes[0], bytes[1], bytes[2], bytes[3]);
@@ -342,8 +351,8 @@ impl Index<usize> for Memory {
 impl Index<Range<usize>> for Memory {
     type Output = [u8];
     fn index(&self, range: Range<usize>) -> &Self::Output {
-        assert!(self.is_address_valid(range.start), "Address {:#x} is not in allocated memory space!", range.start);
-        assert!(self.is_address_valid(range.end-1), "Address {:#x} is not in allocated memory space!", range.end);
+        assert!(self.is_address_valid(range.start), "Address {:#x} (start of range) is not in allocated memory space!", range.start);
+        assert!(self.is_address_valid(range.end-1), "Address {:#x} (end of range) is not in allocated memory space!", range.end);
         let segment = self.get_segment_for_address(range.start as i32);
         if segment != self.get_segment_for_address(range.end as i32) {
             panic!("Range has to be in the same segment!");
@@ -362,17 +371,17 @@ impl IndexMut<usize> for Memory {
     }
 }
 
-fn parse_immediate(str: &str) -> i32 {
+fn parse_immediate(str: &str) -> i64 {
     if str.starts_with("0x") {
         return parse_hex_string(str);
     }
-    str.parse::<i32>().expect("Expected a numeric value!")
+    str.parse::<i64>().expect("Expected a numeric value!")
 }
 
-fn parse_hex_string(str: &str) -> i32 {
+fn parse_hex_string(str: &str) -> i64 {
     let str = &str[2..];
     let mut total = 0;
-    let mut map: HashMap<char, i32> = HashMap::new();
+    let mut map: HashMap<char, i64> = HashMap::new();
     map.insert('0', 0);
     map.insert('1', 1);
     map.insert('2', 2);
@@ -396,7 +405,7 @@ fn parse_hex_string(str: &str) -> i32 {
 }
 
 // Take a String and parse it into a index for a block of memory.
-fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) -> i32 {
+fn parse_memory_location<'a>(variables: &HashMap<&'a str, i64>, str: &'a str) -> i64 {
     /*if !str.starts_with('[') || !str.ends_with(']') {
         panic!("Incorrectly formatted address mode");
     }
@@ -415,12 +424,12 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i32>, str: &'a str) ->
     let split_string:Vec<&str> = str.split('(').collect();
     let reg = &split_string[1][..split_string[1].len()-1];
     assert!(variables[reg] >= 0, "{} < 0", reg);
-    split_string[0].parse::<i32>().unwrap() + variables[reg]
+    split_string[0].parse::<i64>().unwrap() + variables[reg]
 }
 
-fn print_stack(variables: &HashMap<&str, i32>, memory: &Memory) {
-    let stack_offset = (memory.virtual_memory_size - memory.stack_memory.len()) as i32;
-    for i in (((variables["sp"] - stack_offset)/4))..(memory.stack_memory.len()/4) as i32 {
+fn print_stack(variables: &HashMap<&str, i64>, memory: &Memory) {
+    let stack_offset = (memory.virtual_memory_size - memory.stack_memory.len()) as i64;
+    for i in (((variables["sp"] - stack_offset)/4))..(memory.stack_memory.len()/4) as i64 {
         let address = (i*4 + stack_offset) as usize;
         print!("{:#04x}│{}", i*4 + stack_offset, memory.load_from(i*4 + stack_offset));
 
@@ -430,12 +439,12 @@ fn print_stack(variables: &HashMap<&str, i32>, memory: &Memory) {
     }
 }
 
-fn random_data() -> i32 {
+fn random_data() -> i64 {
     let ptr = Box::into_raw(Box::new(123));
-    return ptr as i32;
+    return ptr as i64;
 }
 
-fn compile(content: &str, memory: &mut Memory) -> (Vec<String>, i32, usize) {
+fn compile(content: &str, memory: &mut Memory) -> (Vec<String>, i64, usize) {
     let mut program: Vec<String> = Vec::new();
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let mut last_jump_label: String = Default::default();
@@ -525,7 +534,7 @@ fn compile(content: &str, memory: &mut Memory) -> (Vec<String>, i32, usize) {
         }
     }
     if jump_tag_map.contains_key("main") {
-        return (program, jump_tag_map["main"] as i32, data_segment_size)
+        return (program, jump_tag_map["main"] as i64, data_segment_size)
     }
     (program, 0, data_segment_size)
 }
@@ -554,10 +563,10 @@ fn main() {
     let (program, entry_point, data_segment_size) = compile(content, &mut memory);
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut variables: HashMap<&str, i32> = HashMap::new();
+    let mut variables: HashMap<&str, i64> = HashMap::new();
     variables.insert("zero", 0);
     variables.insert("ra", random_data());
-    variables.insert("sp", (memory.virtual_memory_size - data_segment_size) as i32);
+    variables.insert("sp", (memory.virtual_memory_size - data_segment_size) as i64);
     variables.insert("eip", entry_point);
     
     variables.insert("t0", random_data());
