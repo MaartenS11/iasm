@@ -9,6 +9,7 @@ use std::env;
 use std::ops::{Index, IndexMut};
 use std::ops::Range;
 use std::cmp;
+use std::cmp::min;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -240,6 +241,27 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
         "ecall" => {
             let syscall_nr = variables["a7"];
             match syscall_nr {
+                3 => {
+                    let fd = variables["a0"];
+                    let buf = variables["a1"];
+                    let count = variables["a2"];
+                    if verbose {
+                        print!("\x1b[34m");
+                        print!("syscall: read(fd = {}, *buf = {:#x}, count={})", fd, buf, count);
+                        println!("\x1b[0m");
+                    }
+                    
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input).unwrap();
+                    let max = min(count as usize, input.len());
+                    for (i, c) in input.chars().enumerate() {
+                        if i >= max {
+                            break;
+                        }
+                        memory[(buf as usize) + i] = c as u8;
+                    }
+                    *variables.get_mut("a0").unwrap() = max as i64;
+                }
                 4 => {
                     let fd = variables["a0"];
                     let buf = variables["a1"];
