@@ -10,6 +10,7 @@ use std::ops::{Index, IndexMut};
 use std::ops::Range;
 use std::cmp;
 use std::cmp::min;
+use crate::fs::File;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -487,11 +488,10 @@ fn random_data() -> i64 {
     return ptr as i64;
 }
 
-fn compile(content: &str, memory: &mut Memory, verbose: bool) -> (Vec<String>, i64, usize) {
-    let mut program: Vec<String> = Vec::new();
+fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<String>, mut data_segment_size: usize) -> (i64, usize) {
+    let start_program_length = program.len();
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let mut last_jump_label: String = Default::default();
-    let mut data_segment_size = 0;
     let lines: Vec<&str> = content.split("\n").collect();
     if verbose {
         println!("Total amount of lines: {}", lines.len());
@@ -508,7 +508,7 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool) -> (Vec<String>, i
 
         if line.ends_with(":") {
             last_jump_label = line[..line.len()-1].to_string();
-            jump_tag_map.insert(last_jump_label[..].to_string(), i - offset);
+            jump_tag_map.insert(last_jump_label[..].to_string(), i - offset + start_program_length);
             offset += 1; // We are removing the line with the jump tag.
         }
         else if line.starts_with('.') {
@@ -553,6 +553,10 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool) -> (Vec<String>, i
             let label = params[params.len()-1].trim();
             let label = label.strip_suffix("@plt").unwrap_or(label);
             if jump_tag_map.contains_key(label) {
+                if label == "brk" {
+                    println!("Mapping label \"{}\" to {}", label, jump_tag_map[label]);
+                }
+            
                 let mut ins = instruction_name.to_owned() + " ";
                 for i in 0..params.len()-1 {
                     ins.push_str(params[i]);
@@ -562,7 +566,8 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool) -> (Vec<String>, i
                 program[i] = ins;
             }
             else if instruction_name != "jr" {
-                panic!("Jump label \"{}\" not found!", label);
+                //panic!("Jump label \"{}\" not found!", label);
+                //println!("WARNING: Jump label \"{}\" not found!", label);
             }
             /*else if variables.contains_key(param) {
                 program[i] = format!("{} {}", instruction_name, jump_tag_map[param]).to_string();
@@ -581,9 +586,9 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool) -> (Vec<String>, i
         }
     }
     if jump_tag_map.contains_key("main") {
-        return (program, jump_tag_map["main"] as i64, data_segment_size)
+        return (jump_tag_map["main"] as i64, data_segment_size)
     }
-    (program, 0, data_segment_size)
+    (0, data_segment_size)
 }
 
 fn main() {
@@ -609,11 +614,36 @@ fn main() {
         }
     }
 
-    let content = &fs::read_to_string(&args[1][..])
+    //let content = &fs::read_to_string(&args[1][..])
+    //    .expect("Could not read file!")[..];
+    let content = &fs::read_to_string("ctest/test2.s")
+        .expect("Could not read file!")[..];
+    let content2 = &fs::read_to_string("ctest/syscalls.s")
         .expect("Could not read file!")[..];
     let mut memory = Memory::new(verbose);
-    let (program, entry_point, data_segment_size) = compile(content, &mut memory, verbose);
+    let mut program = Vec::new();
+    let (entry_point, data_segment_size) = compile(content, &mut memory, verbose, &mut program, 0);
+    let (_, data_segment_size) = compile(content2, &mut memory, verbose, &mut program, data_segment_size);
     let digit_count = (program.len() -1).to_string().len();
+    
+    println!("Compilation finished");
+    
+    // Write compiled program to file
+    let mut output = File::create("output.s").unwrap();
+    writeln!(output, "header:").unwrap();
+    writeln!(output, "entry_point = {}", entry_point).unwrap();
+    writeln!(output, "data_segment_size = {}", data_segment_size).unwrap();
+    writeln!(output, "code:").unwrap();
+    for line in &program {
+        writeln!(output, "{}", line).unwrap();
+    }
+    writeln!(output, "stack:").unwrap();
+    for i in 0..data_segment_size {
+        //write!(output, "{} ", memory[memory.virtual_memory_size - data_segment_size + i] as char).unwrap();
+        write!(output, "{:#04x} ", memory[memory.virtual_memory_size - data_segment_size + i]).unwrap();
+    }
+    
+    println!("Write finished");
 
     let mut variables: HashMap<&str, i64> = HashMap::new();
     variables.insert("zero", 0);
