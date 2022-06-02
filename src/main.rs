@@ -276,6 +276,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
                         let c = memory[i as usize] as char;
                         print!("{}", c);
                     }
+                    io::stdout().flush().unwrap();
                 },
                 45 => {
                     let addr = variables["a0"] as usize;
@@ -311,7 +312,7 @@ impl Memory {
             program_break: 0,
             heap_memory:  Vec::new(),
             virtual_memory_size: 4096,
-            verbose: verbose
+            verbose
         }
     }
 
