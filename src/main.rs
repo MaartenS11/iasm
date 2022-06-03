@@ -488,9 +488,9 @@ fn random_data() -> i64 {
     return ptr as i64;
 }
 
-fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<String>, data_segment_size: &mut usize) -> i64 {
+fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<String>, data_segment_size: &mut usize, jump_tag_map: &mut HashMap<String, usize>) -> i64 {
     let start_program_length = program.len();
-    let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
+    //let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let mut last_jump_label: String = Default::default();
     let lines: Vec<&str> = content.split("\n").collect();
     if verbose {
@@ -614,18 +614,23 @@ fn main() {
         }
     }
 
-    //let content = &fs::read_to_string(&args[1][..])
-    //    .expect("Could not read file!")[..];
-    let content = &fs::read_to_string("ctest/test2.s")
-        .expect("Could not read file!")[..];
-    let content2 = &fs::read_to_string("ctest/syscalls.s")
-        .expect("Could not read file!")[..];
     let mut memory = Memory::new(verbose);
     let mut program = Vec::new();
     let mut data_segment_size = 0;
-    let entry_point = compile(content, &mut memory, verbose, &mut program, &mut data_segment_size);
-    let _ = compile(content2, &mut memory, verbose, &mut program, &mut data_segment_size);
-    let digit_count = (program.len() -1).to_string().len();
+    let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
+    let mut entry_point = 0;
+    
+    //let files = vec!["ctest/syscalls.s", "ctest/test2.s"];
+    let files = vec!["ctest/test2.s", "ctest/syscalls.s"];
+    for file in files {
+        println!("Compiling \"{}\"", file);
+        let content = &fs::read_to_string(file)
+            .expect("Could not read file!")[..];
+        let ep = compile(content, &mut memory, verbose, &mut program, &mut data_segment_size, &mut jump_tag_map);
+        if ep != 0 {
+            entry_point = ep;
+        }
+    }
     
     println!("Compilation finished entry_point = {}, data_segment_size = {} bytes", entry_point, data_segment_size);
     
@@ -645,6 +650,8 @@ fn main() {
     }
     
     println!("Write finished");
+    
+    let digit_count = (program.len() -1).to_string().len();
 
     let mut variables: HashMap<&str, i64> = HashMap::new();
     variables.insert("zero", 0);
