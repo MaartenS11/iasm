@@ -553,8 +553,10 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<
             let label = params[params.len()-1].trim();
             let label = label.strip_suffix("@plt").unwrap_or(label);
             if jump_tag_map.contains_key(label) {
-                if label == "brk" {
-                    println!("Mapping label \"{}\" to {}", label, jump_tag_map[label]);
+                if !label.starts_with('.') {
+                    print!("\x1b[32m");
+                    print!("Mapping label \"{}\" to {}", label, jump_tag_map[label]);
+                    println!("\x1b[0m");
                 }
             
                 let mut ins = instruction_name.to_owned() + " ";
@@ -623,7 +625,8 @@ fn main() {
     let mut entry_point = 0;
     
     for file in files {
-        print!("\x1b[32m");
+        print!("\x1b[92m");
+        print!("\x1b[1m");
         print!("Compiling \"{}\"", file);
         println!("\x1b[0m");
         let content = &fs::read_to_string(file)
