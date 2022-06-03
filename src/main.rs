@@ -488,7 +488,7 @@ fn random_data() -> i64 {
     return ptr as i64;
 }
 
-fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<String>, mut data_segment_size: usize) -> (i64, usize) {
+fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<String>, data_segment_size: &mut usize) -> i64 {
     let start_program_length = program.len();
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let mut last_jump_label: String = Default::default();
@@ -517,19 +517,19 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<
                 let str = line.split_once(' ').unwrap().1.trim();
                 let str = unescape::unescape(&str[1..str.len()-1]).unwrap();
                 
-                data_segment_size += str.len() + 1;
+                *data_segment_size += str.len() + 1;
                 let size = memory.stack_memory.len();
                 for (i, c) in str.char_indices() {
-                    memory.stack_memory[size - data_segment_size + i] = c as u8;
+                    memory.stack_memory[size - *data_segment_size + i] = c as u8;
                 }
-                memory.stack_memory[size - data_segment_size + str.len()] = '\0' as u8;
+                memory.stack_memory[size - *data_segment_size + str.len()] = '\0' as u8;
 
-                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - data_segment_size);
+                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - *data_segment_size);
             } else if line.starts_with(".zero") {
                 let size = line.split_once(' ').unwrap().1.trim().parse::<usize>().unwrap();
 
-                data_segment_size += size;
-                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - data_segment_size);
+                *data_segment_size += size;
+                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - *data_segment_size);
             }
         }
         else if line == "" || line.starts_with('#') {
@@ -586,9 +586,9 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<
         }
     }
     if jump_tag_map.contains_key("main") {
-        return (jump_tag_map["main"] as i64, data_segment_size)
+        return jump_tag_map["main"] as i64
     }
-    (0, data_segment_size)
+    0
 }
 
 fn main() {
@@ -622,11 +622,12 @@ fn main() {
         .expect("Could not read file!")[..];
     let mut memory = Memory::new(verbose);
     let mut program = Vec::new();
-    let (entry_point, data_segment_size) = compile(content, &mut memory, verbose, &mut program, 0);
-    let (_, data_segment_size) = compile(content2, &mut memory, verbose, &mut program, data_segment_size);
+    let mut data_segment_size = 0;
+    let entry_point = compile(content, &mut memory, verbose, &mut program, &mut data_segment_size);
+    let _ = compile(content2, &mut memory, verbose, &mut program, &mut data_segment_size);
     let digit_count = (program.len() -1).to_string().len();
     
-    println!("Compilation finished");
+    println!("Compilation finished entry_point = {}, data_segment_size = {} bytes", entry_point, data_segment_size);
     
     // Write compiled program to file
     let mut output = File::create("output.s").unwrap();
