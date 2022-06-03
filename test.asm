@@ -16,8 +16,8 @@ fibonacci:
 
 squares:
     mv a4, sp
-    li a1, 48
-    sub sp, a1
+    li a1, 112
+    sub sp, sp, a1
     
     mv a2, sp
     add a2, a2, a1
@@ -26,7 +26,7 @@ squares:
 .L1:
     sw a0, 0(a3)
     add a0, a0, a0
-    addi a3, a3, 4
+    addi a3, a3, 8
     bne a3, a2, .L1 #Check iteration count
     
     mv sp, a4
@@ -35,24 +35,24 @@ squares:
 main:
     # Calculate the (5 + 1)th fibonacci number
     li a0, 5
-    addi sp, sp, -4
+    addi sp, sp, -8
     sw a0, 0(sp)
     jal ra, fibonacci
-    addi sp, sp, 4
+    addi sp, sp, 8
 
     # Calculate the (6 + 1)th fibonacci number
     li a0, 6
-    addi sp, sp, -4
+    addi sp, sp, -8
     sw a0, 0(sp)
     jal ra, fibonacci
-    addi sp, sp, 4
+    addi sp, sp, 8
 
     # Calculate the (45 + 1)th fibonacci number
     li a0, 45
-    addi sp, sp, -4
+    addi sp, sp, -8
     sw a0, 0(sp)
     jal ra, fibonacci
-    addi sp, sp, 4
+    addi sp, sp, 8
 
     # Generate table containing squares of 2
     # 0x10│2
