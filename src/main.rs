@@ -6,11 +6,14 @@ use std::io::{self, Write};
 use std::{fs, process};
 use std::time::Instant;
 use std::env;
-use std::ops::{Index, IndexMut};
-use std::ops::Range;
-use std::cmp;
 use std::cmp::min;
 use crate::fs::File;
+
+use crate::memory::Memory;
+use crate::compile::compile_files;
+
+mod compile;
+mod memory;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -298,112 +301,6 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
     *variables.get_mut("eip").unwrap() += 1;
 }
 
-struct Memory {
-    stack_memory: Vec<u8>,
-    program_break: usize,
-    heap_memory: Vec<u8>,
-    virtual_memory_size: usize,
-    verbose: bool
-}
-
-impl Memory {
-    fn new(verbose: bool) -> Self {
-        Memory {
-            stack_memory: vec![0; 2048],
-            program_break: 0,
-            heap_memory:  Vec::new(),
-            virtual_memory_size: 4096,
-            verbose
-        }
-    }
-
-    fn load_from(&self, address: i64) -> i64 {
-        let address = address as usize;
-        let mut value: [u8; 8] = Default::default();
-        value.copy_from_slice(&self[address..address + 8]);
-        i64::from_le_bytes(value)
-    }
-
-    fn store_to(&mut self, address: i64, value: i64, byte_count: usize) {
-        let address = address as usize;
-        let bytes = value.to_le_bytes();
-        //println!("{} {} {} {}", bytes[0], bytes[1], bytes[2], bytes[3]);
-        for i in 0..byte_count {
-            let val = bytes[i];
-            if self.verbose {
-                print!("\x1b[33m");
-                print!("memory[{:#04x}] = {} '{}'", address + i, val, val as char);
-                println!("\x1b[0m");
-            }
-            self[address + i] = val;
-        }
-    }
-
-    fn is_stack_address(&self, address: i32) -> bool {
-        address as usize >= self.virtual_memory_size - self.stack_memory.len()
-    }
-
-    fn get_segment_for_address(&self, address: i32) -> &Vec<u8> {
-        if self.is_stack_address(address) {
-            return &self.stack_memory
-        }
-        &self.heap_memory
-    }
-
-    fn get_segment_for_address_mut(&mut self, address: i32) -> &mut Vec<u8> {
-        if self.is_stack_address(address) {
-            return &mut self.stack_memory
-        }
-        &mut self.heap_memory
-    }
-
-    fn address_to_index(&self, address: i32) -> usize {
-        if self.is_stack_address(address) {
-            return (address as usize) - (self.virtual_memory_size - self.stack_memory.len());
-        }
-        address as usize
-    }
-
-    fn is_address_valid(&self, address: usize) -> bool {
-        if self.is_stack_address(address as i32) {
-            return address - (self.virtual_memory_size - self.stack_memory.len()) < self.stack_memory.len()
-        }
-        address < self.heap_memory.len()
-    }
-}
-
-impl Index<usize> for Memory {
-    type Output = u8;
-    fn index(&self, address: usize) -> &Self::Output {
-        assert!(self.is_address_valid(address), "Address {:#x} is not in allocated memory space!", address);
-        let index = self.address_to_index(address as i32);
-        &self.get_segment_for_address(address as i32)[index]
-    }
-}
-
-impl Index<Range<usize>> for Memory {
-    type Output = [u8];
-    fn index(&self, range: Range<usize>) -> &Self::Output {
-        assert!(self.is_address_valid(range.start), "Address {:#x} (start of range) is not in allocated memory space!", range.start);
-        assert!(self.is_address_valid(range.end-1), "Address {:#x} (end of range) is not in allocated memory space!", range.end);
-        let segment = self.get_segment_for_address(range.start as i32);
-        if segment != self.get_segment_for_address(range.end as i32) {
-            panic!("Range has to be in the same segment!");
-        }
-        let range_len = cmp::max(range.end - range.start, 0);
-        let range_start = self.address_to_index(range.start as i32);
-        &segment[range_start..range_start + range_len]
-    }
-}
-
-impl IndexMut<usize> for Memory {
-    fn index_mut(&mut self, address: usize) -> &mut Self::Output {
-        assert!(self.is_address_valid(address), "Address {:#x} is not in allocated memory space!", address);
-        let index = self.address_to_index(address as i32);
-        &mut self.get_segment_for_address_mut(address as i32)[index]
-    }
-}
-
 fn parse_immediate(str: &str) -> i64 {
     if str.starts_with("0x") {
         return parse_hex_string(str);
@@ -486,135 +383,6 @@ fn print_stack(variables: &HashMap<&str, i64>, memory: &Memory) {
 fn random_data() -> i64 {
     let ptr = Box::into_raw(Box::new(123));
     return ptr as i64;
-}
-
-fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<String>, data_segment_size: &mut usize, jump_tag_map: &mut HashMap<String, usize>) -> i64 {
-    let start_program_length = program.len();
-    let mut last_jump_label: String = Default::default();
-    let lines: Vec<&str> = content.split("\n").collect();
-    if verbose {
-        println!("Total amount of lines: {}", lines.len());
-    }
-    let digit_count = (lines.len() -1).to_string().len();
-    let mut offset = 0;
-    for (i, line) in lines.iter().enumerate() {
-        if verbose {
-            println!("{:width$}│{}", i, line, width=digit_count);
-        }
-        
-        let line = line.trim().replace('\t', " ");
-        let line = String::from(line[..line.find('#').unwrap_or_else(|| line.len())].trim());
-
-        if line.ends_with(":") {
-            last_jump_label = line[..line.len()-1].to_string();
-            jump_tag_map.insert(last_jump_label[..].to_string(), i - offset + start_program_length);
-            offset += 1; // We are removing the line with the jump tag.
-        }
-        else if line.starts_with('.') {
-            offset += 1;
-            if line.starts_with(".string") {
-                let str = line.split_once(' ').unwrap().1.trim();
-                let str = unescape::unescape(&str[1..str.len()-1]).unwrap();
-                
-                *data_segment_size += str.len() + 1;
-                let size = memory.stack_memory.len();
-                for (i, c) in str.char_indices() {
-                    memory.stack_memory[size - *data_segment_size + i] = c as u8;
-                }
-                memory.stack_memory[size - *data_segment_size + str.len()] = '\0' as u8;
-
-                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - *data_segment_size);
-            } else if line.starts_with(".zero") {
-                let size = line.split_once(' ').unwrap().1.trim().parse::<usize>().unwrap();
-
-                *data_segment_size += size;
-                jump_tag_map.insert(last_jump_label[..].to_string(), memory.virtual_memory_size - *data_segment_size);
-            }
-        }
-        else if line == "" || line.starts_with('#') {
-            offset += 1;
-        }
-        else {
-            program.push(line);
-        }
-    }
-
-    for i in 0..program.len() {
-        let line = &program[i];
-        let (instruction_name, params) = line.split_once(" ").unwrap_or_else(|| (line, ""));
-        let (mut instruction_name, mut params) = (instruction_name, String::from(params));
-        if line.starts_with("j") || line.starts_with("call") || line.starts_with('b') || line.starts_with("lla") {
-            if instruction_name == "call" {
-                instruction_name = "jal";
-                params = format!("ra, {}", params);
-            }
-            let params: Vec<&str> = params.split(',').collect();
-            let label = params[params.len()-1].trim();
-            let label = label.strip_suffix("@plt").unwrap_or(label);
-            if jump_tag_map.contains_key(label) {
-                if !label.starts_with('.') {
-                    print!("\x1b[32m");
-                    print!("Mapping label \"{}\" to {}", label, jump_tag_map[label]);
-                    println!("\x1b[0m");
-                }
-            
-                let mut ins = instruction_name.to_owned() + " ";
-                for i in 0..params.len()-1 {
-                    ins.push_str(params[i]);
-                    ins.push_str(",");
-                }
-                ins.push_str(&jump_tag_map[label].to_string()[..]);
-                program[i] = ins;
-            }
-            else if instruction_name != "jr" {
-                //panic!("Jump label \"{}\" not found!", label);
-                //println!("WARNING: Jump label \"{}\" not found!", label);
-            }
-            /*else if variables.contains_key(param) {
-                program[i] = format!("{} {}", instruction_name, jump_tag_map[param]).to_string();
-            }
-            else {
-                let jump_location = param.parse::<i32>();
-                match jump_location {
-                    Ok(val) => {
-                        if val < 0 || val >= program.len() as i32 {
-                            panic!("Parameter \"{}\" is not a valid jump destination!", param)
-                        }
-                    },
-                    Err(_) => panic!("Label \"{}\" is not a valid jump destination!", param)
-                }
-            }*/
-        }
-    }
-    if jump_tag_map.contains_key("main") {
-        return jump_tag_map["main"] as i64
-    }
-    0
-}
-
-fn compile_files(files: &[String], memory: &mut Memory, verbose: bool) -> (Vec<String>, i64, usize) {
-    let mut program = Vec::new();
-    let mut data_segment_size = 0;
-    let mut entry_point = 0;
-    
-    let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
-    for file in files {
-        print!("\x1b[92m");
-        print!("\x1b[1m");
-        print!("Compiling \"{}\"", file);
-        println!("\x1b[0m");
-        let content = &fs::read_to_string(file)
-            .expect("Could not read file!")[..];
-        let ep = compile(content, memory, verbose, &mut program, &mut data_segment_size, &mut jump_tag_map);
-        if ep != 0 {
-            entry_point = ep;
-        }
-    }
-    print!("\x1b[92m");
-    print!("\x1b[1m");
-    print!("Compilation finished, entry_point = {}, data_segment_size = {} bytes", entry_point, data_segment_size);
-    println!("\x1b[0m");
-    return (program, entry_point, data_segment_size);
 }
 
 fn main() {
