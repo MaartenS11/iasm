@@ -490,7 +490,6 @@ fn random_data() -> i64 {
 
 fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<String>, data_segment_size: &mut usize, jump_tag_map: &mut HashMap<String, usize>) -> i64 {
     let start_program_length = program.len();
-    //let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let mut last_jump_label: String = Default::default();
     let lines: Vec<&str> = content.split("\n").collect();
     if verbose {
@@ -593,6 +592,31 @@ fn compile(content: &str, memory: &mut Memory, verbose: bool, program: &mut Vec<
     0
 }
 
+fn compile_files(files: &[String], memory: &mut Memory, verbose: bool) -> (Vec<String>, i64, usize) {
+    let mut program = Vec::new();
+    let mut data_segment_size = 0;
+    let mut entry_point = 0;
+    
+    let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
+    for file in files {
+        print!("\x1b[92m");
+        print!("\x1b[1m");
+        print!("Compiling \"{}\"", file);
+        println!("\x1b[0m");
+        let content = &fs::read_to_string(file)
+            .expect("Could not read file!")[..];
+        let ep = compile(content, memory, verbose, &mut program, &mut data_segment_size, &mut jump_tag_map);
+        if ep != 0 {
+            entry_point = ep;
+        }
+    }
+    print!("\x1b[92m");
+    print!("\x1b[1m");
+    print!("Compilation finished, entry_point = {}, data_segment_size = {} bytes", entry_point, data_segment_size);
+    println!("\x1b[0m");
+    return (program, entry_point, data_segment_size);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut debug = false;
@@ -619,25 +643,7 @@ fn main() {
     }
 
     let mut memory = Memory::new(verbose);
-    let mut program = Vec::new();
-    let mut data_segment_size = 0;
-    let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
-    let mut entry_point = 0;
-    
-    for file in files {
-        print!("\x1b[92m");
-        print!("\x1b[1m");
-        print!("Compiling \"{}\"", file);
-        println!("\x1b[0m");
-        let content = &fs::read_to_string(file)
-            .expect("Could not read file!")[..];
-        let ep = compile(content, &mut memory, verbose, &mut program, &mut data_segment_size, &mut jump_tag_map);
-        if ep != 0 {
-            entry_point = ep;
-        }
-    }
-    
-    println!("Compilation finished entry_point = {}, data_segment_size = {} bytes", entry_point, data_segment_size);
+    let (program, entry_point, data_segment_size) = compile_files(files, &mut memory, verbose);
     
     // Write compiled program to file
     let mut output = File::create("output.s").unwrap();
