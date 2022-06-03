@@ -595,22 +595,24 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let mut debug = false;
     let mut verbose = false;
+    let mut files = &args[1..];
     if args.len() < 2 {
         eprintln!("Expected at least one argument!");
         process::exit(1);
     }
     
     if args.len() >= 3 {
-        match &args[2][..] {
+        match &args[args.len()-1][..] {
             "debug" => {
                 debug = true;
                 verbose = true;
+                files = &args[1..args.len()-1];
             },
-            "verbose" => verbose = true,
-            _ => {
-                eprintln!("Argument \"{}\" is not a valid option", args[2]);
-                process::exit(1);
-            }
+            "verbose" => {
+                verbose = true;
+                files = &args[1..args.len()-1];
+            },
+            _ => {}
         }
     }
 
@@ -620,10 +622,10 @@ fn main() {
     let mut jump_tag_map: HashMap<String, usize> = HashMap::new();
     let mut entry_point = 0;
     
-    //let files = vec!["ctest/syscalls.s", "ctest/test2.s"];
-    let files = vec!["ctest/test2.s", "ctest/syscalls.s"];
     for file in files {
-        println!("Compiling \"{}\"", file);
+        print!("\x1b[32m");
+        print!("Compiling \"{}\"", file);
+        println!("\x1b[0m");
         let content = &fs::read_to_string(file)
             .expect("Could not read file!")[..];
         let ep = compile(content, &mut memory, verbose, &mut program, &mut data_segment_size, &mut jump_tag_map);
