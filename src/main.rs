@@ -11,9 +11,11 @@ use crate::fs::File;
 
 use crate::memory::Memory;
 use crate::compile::compile_files;
+use crate::registers::Registers;
 
 mod compile;
 mod memory;
+mod registers;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -26,7 +28,7 @@ fn promt(message: &str) -> String {
     String::from(name.trim())
 }
 
-fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i64>, memory: &mut Memory, verbose: bool) {
+fn evaluate<'a, 'b>(instruction: &'a str, registers: &'a mut Registers, memory: &mut Memory, verbose: bool) {
     let mut instruction_name = instruction;
     let mut params_string = "";
     let s = instruction.split_once(" ");
@@ -39,216 +41,216 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
     let params: Vec<&str> = params_string.trim().split(",").collect();
 
     match instruction_name {
-        "mv" => *variables.get_mut(params[0]).unwrap() = variables[params[1].trim()],
-        "ld" => *variables.get_mut(params[0]).unwrap() = memory.load_from(parse_memory_location(variables, params[1].trim())),
-        //"lw" => *variables.get_mut(params[0]).unwrap() = (memory.load_from(parse_memory_location(variables, params[1].trim())) as i32) as i64,
+        "mv" => registers[params[0]] = registers[params[1].trim()],
+        "ld" => registers[params[0]] = memory.load_from(parse_memory_location(registers, params[1].trim())),
+        //"lw" => variables[params[0]] = (memory.load_from(parse_memory_location(variables, params[1].trim())) as i32) as i64,
         "lw" => {
-            let address = parse_memory_location(variables, params[1].trim()) as usize;
+            let address = parse_memory_location(registers, params[1].trim()) as usize;
             let mut value: [u8; 4] = Default::default();
             value.copy_from_slice(&memory[address..address + 4]);
-            *variables.get_mut(params[0]).unwrap() = i32::from_le_bytes(value) as i64
+            registers[params[0]] = i32::from_le_bytes(value) as i64
         },
-        "lwu" => *variables.get_mut(params[0]).unwrap() = (memory.load_from(parse_memory_location(variables, params[1].trim())) as u32) as i64,
+        "lwu" => registers[params[0]] = (memory.load_from(parse_memory_location(registers, params[1].trim())) as u32) as i64,
         "lbu" => {
-            let address = parse_memory_location(variables, params[1].trim()) as usize;
-            *variables.get_mut(params[0]).unwrap() = (memory[address] as i64) & 0xff; //Remove sign extension
+            let address = parse_memory_location(registers, params[1].trim()) as usize;
+            registers[params[0]] = (memory[address] as i64) & 0xff; //Remove sign extension
         },
         "lb" => {
-            let address = parse_memory_location(variables, params[1].trim()) as usize;
-            *variables.get_mut(params[0]).unwrap() = memory[address] as i64; //Sign extend to i64
+            let address = parse_memory_location(registers, params[1].trim()) as usize;
+            registers[params[0]] = memory[address] as i64; //Sign extend to i64
         },
         "lhu" => {
-            let address = parse_memory_location(variables, params[1].trim()) as usize;
-            *variables.get_mut(params[0]).unwrap() = ((memory[address] as u64 | (memory[address+1] as u64) << 8) as i64) & 0xffff; //Remove sign extension
+            let address = parse_memory_location(registers, params[1].trim()) as usize;
+            registers[params[0]] = ((memory[address] as u64 | (memory[address+1] as u64) << 8) as i64) & 0xffff; //Remove sign extension
         },
-        "li" | "lla" => *variables.get_mut(params[0]).unwrap() = parse_immediate(params[1].trim()),
-        "sd" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 8),
-        "sw" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 4),
-        "sh" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 2),
-        "sb" => memory.store_to(parse_memory_location(variables, params[1].trim()), variables[params[0]], 1),
-        "inc" => *variables.get_mut(params[0]).unwrap() += 1,
-        "dec" => *variables.get_mut(params[0]).unwrap() -= 1,
+        "li" | "lla" => registers[params[0]] = parse_immediate(params[1].trim()),
+        "sd" => memory.store_to(parse_memory_location(registers, params[1].trim()), registers[params[0]], 8),
+        "sw" => memory.store_to(parse_memory_location(registers, params[1].trim()), registers[params[0]], 4),
+        "sh" => memory.store_to(parse_memory_location(registers, params[1].trim()), registers[params[0]], 2),
+        "sb" => memory.store_to(parse_memory_location(registers, params[1].trim()), registers[params[0]], 1),
+        "inc" => registers[params[0]] += 1,
+        "dec" => registers[params[0]] -= 1,
         "add" | "addw" => {
-            let a = variables[params[1].trim()];
-            let b = variables[params[2].trim()];
-            *variables.get_mut(params[0]).unwrap() = a + b;
+            let a = registers[params[1].trim()];
+            let b = registers[params[2].trim()];
+            registers[params[0]] = a + b;
         },
         "addi" | "addiw" => {
-            let a = variables[params[1].trim()];
+            let a = registers[params[1].trim()];
             let b = params[2].trim().parse::<i64>().unwrap();
-            *variables.get_mut(params[0]).unwrap() = a + b;
+            registers[params[0]] = a + b;
         },
         "sub" | "subw" => {
-            let a = *variables.get_mut(params[1].trim()).unwrap();
-            let b = *variables.get_mut(params[2].trim()).unwrap();
+            let a = registers[params[1].trim()];
+            let b = registers[params[2].trim()];
             let result = a - b;
-            *variables.get_mut(params[0]).unwrap() = result;
+            registers[params[0]] = result;
         },
         "mul" | "mulw" => {
-            let a = variables[params[1].trim()];
-            let b = variables[params[2].trim()];
-            *variables.get_mut(params[0]).unwrap() = a * b;
+            let a = registers[params[1].trim()];
+            let b = registers[params[2].trim()];
+            registers[params[0]] = a * b;
         },
         "divw" => {
-            let a = variables[params[1].trim()];
-            let b = variables[params[2].trim()];
-            *variables.get_mut(params[0]).unwrap() = a / b;
+            let a = registers[params[1].trim()];
+            let b = registers[params[2].trim()];
+            registers[params[0]] = a / b;
         },
         "negw" => {
-            let a = variables[params[1].trim()];
-            *variables.get_mut(params[0]).unwrap() = -a; //subw rd, x0, rs
+            let a = registers[params[1].trim()];
+            registers[params[0]] = -a; //subw rd, x0, rs
         },
         "nop" => (),
         "j" => {
             let jump_pos;
-            if variables.contains_key(params[0]) {
-                jump_pos = *variables.get_mut(params[0].trim()).unwrap();
+            if registers.has_register(params[0]) {
+                jump_pos = registers[params[0].trim()];
             }
             else {
                 jump_pos = params[0].trim().parse().expect("Expected number!");
             }
-            *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            registers["eip"] = jump_pos - 1;
         },
         "jr" => {
-            let jump_pos = *variables.get_mut(params[0].trim()).unwrap();
-            *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            let jump_pos = registers[params[0].trim()];
+            registers["eip"] = jump_pos - 1;
         }
         "jal" => {
             let jump_pos: i64 = params[params.len()-1].trim().parse().expect("Expected address!");
-            *variables.get_mut(params[0]).unwrap() = variables["eip"] + 1;
-            *variables.get_mut("eip").unwrap() = jump_pos - 1;
+            registers[params[0]] = registers["eip"] + 1;
+            registers["eip"] = jump_pos - 1;
         },
         "bne" => {
-            let a = variables[params[0].trim()];
-            let b = variables[params[1].trim()];
+            let a = registers[params[0].trim()];
+            let b = registers[params[1].trim()];
             if a != b {
                 let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "beq" => {
-            let a = variables[params[0].trim()];
-            let b = variables[params[1].trim()];
+            let a = registers[params[0].trim()];
+            let b = registers[params[1].trim()];
             if a == b {
                 let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "ble" => {
-            let a = variables[params[0].trim()];
-            let b = variables[params[1].trim()];
+            let a = registers[params[0].trim()];
+            let b = registers[params[1].trim()];
             if a <= b {
                 let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "blt" => {
-            let a = variables[params[0].trim()];
-            let b = variables[params[1].trim()];
+            let a = registers[params[0].trim()];
+            let b = registers[params[1].trim()];
             if a < b {
                 let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "bnez" => {
-            let a = variables[params[0].trim()];
+            let a = registers[params[0].trim()];
             if a != 0 {
                 let jump_pos: i64 = params[1].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "bge" => {
-            let a = variables[params[0].trim()];
-            let b = variables[params[1].trim()];
+            let a = registers[params[0].trim()];
+            let b = registers[params[1].trim()];
             if a >= b {
                 let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "bgtz" => {
-            let a = variables[params[0].trim()];
+            let a = registers[params[0].trim()];
             if a > 0 {
                 let jump_pos: i64 = params[1].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "bgez" => {
-            let a = variables[params[0].trim()];
+            let a = registers[params[0].trim()];
             if a >= 0 {
                 let jump_pos: i64 = params[1].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "bgtu" => {
-            let a = variables[params[0].trim()] as u64;
-            let b = variables[params[1].trim()] as u64;
+            let a = registers[params[0].trim()] as u64;
+            let b = registers[params[1].trim()] as u64;
             if a > b {
                 let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "bltu" => {
-            let a = variables[params[0].trim()] as u64;
-            let b = variables[params[1].trim()] as u64;
+            let a = registers[params[0].trim()] as u64;
+            let b = registers[params[1].trim()] as u64;
             if a < b {
                 let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
-                *variables.get_mut("eip").unwrap() = jump_pos - 1;
+                registers["eip"] = jump_pos - 1;
             }
         },
         "ret" => {
-            *variables.get_mut("eip").unwrap() = variables["ra"] - 1;
+            registers["eip"] = registers["ra"] - 1;
         },
         "slli" | "slliw" => {
-            let a = variables[params[1].trim()] as u64;
+            let a = registers[params[1].trim()] as u64;
             let b = parse_immediate(params[2].trim()) & 0b11111;
-            *variables.get_mut(params[0]).unwrap() = (a << b) as i64;
+            registers[params[0]] = (a << b) as i64;
         },
         "srli" | "slriw" => {
-            let a = variables[params[1].trim()] as u64;
+            let a = registers[params[1].trim()] as u64;
             let b = parse_immediate(params[2].trim()) & 0b11111;
-            *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0) as i64;
+            registers[params[0]] = a.checked_shr(b as u32).unwrap_or(0) as i64;
         },
         "sraiw" => {
-            let a = variables[params[1].trim()];
+            let a = registers[params[1].trim()];
             let b = parse_immediate(params[2].trim()) & 0b11111;
-            *variables.get_mut(params[0]).unwrap() = a.checked_shr(b as u32).unwrap_or(0);
+            registers[params[0]] = a.checked_shr(b as u32).unwrap_or(0);
         },
         "or" => {
-            let a = variables[params[1].trim()];
-            let b = variables[params[2].trim()];
-            *variables.get_mut(params[0]).unwrap() = a | b;
+            let a = registers[params[1].trim()];
+            let b = registers[params[2].trim()];
+            registers[params[0]] = a | b;
         },
         "ori" => {
-            let a = variables[params[1].trim()];
+            let a = registers[params[1].trim()];
             let b = parse_immediate(params[2].trim());
-            *variables.get_mut(params[0]).unwrap() = a | b;
+            registers[params[0]] = a | b;
         },
         "and" => {
-            let a = variables[params[1].trim()];
-            let b = variables[params[2].trim()];
-            *variables.get_mut(params[0]).unwrap() = a & b;
+            let a = registers[params[1].trim()];
+            let b = registers[params[2].trim()];
+            registers[params[0]] = a & b;
         },
         "andi" => {
-            let a = variables[params[1].trim()];
+            let a = registers[params[1].trim()];
             let b = parse_immediate(params[2].trim());
-            *variables.get_mut(params[0]).unwrap() = a & b;
+            registers[params[0]] = a & b;
         },
         "remw" => {
-            let a = variables[params[1].trim()];
-            let b = variables[params[2].trim()];
-            *variables.get_mut(params[0]).unwrap() = a % b;
+            let a = registers[params[1].trim()];
+            let b = registers[params[2].trim()];
+            registers[params[0]] = a % b;
         },
         "sext.w" => {
-            let a = variables[params[1].trim()];
-            *variables.get_mut(params[0]).unwrap() = a;
+            let a = registers[params[1].trim()];
+            registers[params[0]] = a;
         },
         "ecall" => {
-            let syscall_nr = variables["a7"];
+            let syscall_nr = registers["a7"];
             match syscall_nr {
                 3 => {
-                    let fd = variables["a0"];
-                    let buf = variables["a1"];
-                    let count = variables["a2"];
+                    let fd = registers["a0"];
+                    let buf = registers["a1"];
+                    let count = registers["a2"];
                     if verbose {
                         print!("\x1b[34m");
                         print!("syscall: read(fd = {}, *buf = {:#x}, count={})", fd, buf, count);
@@ -264,12 +266,12 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
                         }
                         memory[(buf as usize) + i] = c as u8;
                     }
-                    *variables.get_mut("a0").unwrap() = max as i64;
+                    registers["a0"] = max as i64;
                 }
                 4 => {
-                    let fd = variables["a0"];
-                    let buf = variables["a1"];
-                    let count = variables["a2"];
+                    let fd = registers["a0"];
+                    let buf = registers["a1"];
+                    let count = registers["a2"];
                     if verbose {
                         print!("\x1b[34m");
                         print!("syscall: write(fd = {}, *buf = {:#x}, count = {})", fd, buf, count);
@@ -283,7 +285,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
                     io::stdout().flush().unwrap();
                 },
                 45 => {
-                    let addr = variables["a0"] as usize;
+                    let addr = registers["a0"] as usize;
                     if verbose {
                         print!("\x1b[34m");
                         print!("syscall: brk(*addr = {:#x})", addr);
@@ -298,7 +300,7 @@ fn evaluate<'a, 'b>(instruction: &'a str, variables: &'a mut HashMap<&'b str, i6
         _ => panic!("Instruction \"{}\" does not exist!", instruction_name)
     }
 
-    *variables.get_mut("eip").unwrap() += 1;
+    registers["eip"] += 1;
 }
 
 fn parse_immediate(str: &str) -> i64 {
@@ -335,7 +337,7 @@ fn parse_hex_string(str: &str) -> i64 {
 }
 
 // Take a String and parse it into a index for a block of memory.
-fn parse_memory_location<'a>(variables: &HashMap<&'a str, i64>, str: &'a str) -> i64 {
+fn parse_memory_location<'a>(registers: &Registers, str: &'a str) -> i64 {
     /*if !str.starts_with('[') || !str.ends_with(']') {
         panic!("Incorrectly formatted address mode");
     }
@@ -353,13 +355,13 @@ fn parse_memory_location<'a>(variables: &HashMap<&'a str, i64>, str: &'a str) ->
     }
     let split_string:Vec<&str> = str.split('(').collect();
     let reg = &split_string[1][..split_string[1].len()-1];
-    assert!(variables[reg] >= 0, "{} < 0", reg);
-    split_string[0].parse::<i64>().unwrap() + variables[reg]
+    assert!(registers[reg] >= 0, "{} < 0", reg);
+    split_string[0].parse::<i64>().unwrap() + registers[reg]
 }
 
-fn print_stack(variables: &HashMap<&str, i64>, memory: &Memory) {
+fn print_stack(registers: &Registers, memory: &Memory) {
     let stack_offset = (memory.virtual_memory_size - memory.stack_memory.len()) as i64;
-    for i in (((variables["sp"] - stack_offset)/8))..(memory.stack_memory.len()/8) as i64 {
+    for i in (((registers["sp"] - stack_offset)/8))..(memory.stack_memory.len()/8) as i64 {
         let address = (i*8 + stack_offset) as usize;
         print!("{:#04x} {:020}", i*8 + stack_offset, memory.load_from(i*8 + stack_offset));
         print!(" ");
@@ -378,11 +380,6 @@ fn print_stack(variables: &HashMap<&str, i64>, memory: &Memory) {
         }
         println!();
     }
-}
-
-fn random_data() -> i64 {
-    let ptr = Box::into_raw(Box::new(123));
-    return ptr as i64;
 }
 
 fn main() {
@@ -432,54 +429,21 @@ fn main() {
     
     let digit_count = (program.len() -1).to_string().len();
 
-    let mut variables: HashMap<&str, i64> = HashMap::new();
-    variables.insert("zero", 0);
-    variables.insert("ra", random_data());
-    variables.insert("sp", (memory.virtual_memory_size - data_segment_size) as i64);
-    variables.insert("eip", entry_point);
     
-    variables.insert("t0", random_data());
-    variables.insert("t1", random_data());
-    variables.insert("t2", random_data());
-
-    variables.insert("s0", random_data());
-    variables.insert("s1", random_data());
-    
-    variables.insert("a0", random_data());
-    variables.insert("a1", random_data());
-    variables.insert("a2", random_data());
-    variables.insert("a3", random_data());
-    variables.insert("a4", random_data());
-    variables.insert("a5", random_data());
-    variables.insert("a6", random_data());
-    variables.insert("a7", random_data());
-
-    variables.insert("s2", random_data());
-    variables.insert("s3", random_data());
-    variables.insert("s4", random_data());
-    variables.insert("s5", random_data());
-    variables.insert("s6", random_data());
-    variables.insert("s7", random_data());
-    variables.insert("s8", random_data());
-    variables.insert("s9", random_data());
-    variables.insert("s10", random_data());
-    variables.insert("s11", random_data());
-
-    variables.insert("t3", random_data());
-    variables.insert("t4", random_data());
-    variables.insert("t5", random_data());
-    variables.insert("t6", random_data());
+    let mut registers = Registers::new();
+    registers["sp"] = (memory.virtual_memory_size - data_segment_size) as i64;
+    registers["eip"] = entry_point;
 
     let start = Instant::now();
     let mut ins_executed = 0;
-    let mut eip = variables["eip"]  as usize;
+    let mut eip = registers["eip"]  as usize;
     while eip < program.len() {
         let ins = &program[eip][..];
         if verbose {
             println!("{}", ins);
         }
-        evaluate(ins, &mut variables, &mut memory, verbose);
-        eip = variables["eip"]  as usize;
+        evaluate(ins, &mut registers, &mut memory, verbose);
+        eip = registers["eip"]  as usize;
         ins_executed += 1;
 
         if debug {
@@ -495,11 +459,11 @@ fn main() {
             }
             let mut input = promt("$ ");
             while input != "stop" && input != "continue" && input != "" {
-                if variables.contains_key(&input[..]) {
-                    println!("{}", variables[&input[..]]);
+                if registers.has_register(&input[..]) {
+                    println!("{}", registers[&input[..]]);
                 }
                 else if input == "stack" {
-                    print_stack(&variables, &memory);
+                    print_stack(&registers, &memory);
                 }
                 else {
                     println!("Invalid command");
@@ -516,16 +480,16 @@ fn main() {
 
     loop {
         let ins = &promt("$ ")[..];
-        if variables.contains_key(ins) {
-            println!("{}", variables[ins]);
+        if registers.has_register(ins) {
+            println!("{}", registers[ins]);
             continue;
         }
         match ins {
             "stack" => {
-                print_stack(&variables, &memory);
+                print_stack(&registers, &memory);
             }
             "exit" => break,
-            _ => evaluate(ins, &mut variables, &mut memory, verbose)
+            _ => evaluate(ins, &mut registers, &mut memory, verbose)
         }
     }
 }
