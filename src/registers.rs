@@ -1,48 +1,48 @@
 use std::{collections::HashMap, ops::{Index, IndexMut}};
 
-pub struct Registers<'a> {
-    pub variables: HashMap<&'a str, i64>
+pub struct Registers {
+    pub variables: HashMap<String, i64>
 }
 
-impl<'a> Registers<'a> {
+impl Registers {
     pub fn new() -> Self {
-        let mut variables: HashMap<&str, i64> = HashMap::new();
-        variables.insert("zero", 0);
-        variables.insert("ra", Self::random_data());
-        variables.insert("sp", Self::random_data());
-        variables.insert("eip", Self::random_data());
+        let mut variables: HashMap<String, i64> = HashMap::new();
+        variables.insert("zero".to_owned(), 0);
+        variables.insert("ra".to_owned(), Self::random_data());
+        variables.insert("sp".to_owned(), Self::random_data());
+        variables.insert("eip".to_owned(), Self::random_data());
 
-        variables.insert("t0", Self::random_data());
-        variables.insert("t1", Self::random_data());
-        variables.insert("t2", Self::random_data());
+        variables.insert("t0".to_owned(), Self::random_data());
+        variables.insert("t1".to_owned(), Self::random_data());
+        variables.insert("t2".to_owned(), Self::random_data());
 
-        variables.insert("s0", Self::random_data());
-        variables.insert("s1", Self::random_data());
+        variables.insert("s0".to_owned(), Self::random_data());
+        variables.insert("s1".to_owned(), Self::random_data());
 
-        variables.insert("a0", Self::random_data());
-        variables.insert("a1", Self::random_data());
-        variables.insert("a2", Self::random_data());
-        variables.insert("a3", Self::random_data());
-        variables.insert("a4", Self::random_data());
-        variables.insert("a5", Self::random_data());
-        variables.insert("a6", Self::random_data());
-        variables.insert("a7", Self::random_data());
+        variables.insert("a0".to_owned(), Self::random_data());
+        variables.insert("a1".to_owned(), Self::random_data());
+        variables.insert("a2".to_owned(), Self::random_data());
+        variables.insert("a3".to_owned(), Self::random_data());
+        variables.insert("a4".to_owned(), Self::random_data());
+        variables.insert("a5".to_owned(), Self::random_data());
+        variables.insert("a6".to_owned(), Self::random_data());
+        variables.insert("a7".to_owned(), Self::random_data());
 
-        variables.insert("s2", Self::random_data());
-        variables.insert("s3", Self::random_data());
-        variables.insert("s4", Self::random_data());
-        variables.insert("s5", Self::random_data());
-        variables.insert("s6", Self::random_data());
-        variables.insert("s7", Self::random_data());
-        variables.insert("s8", Self::random_data());
-        variables.insert("s9", Self::random_data());
-        variables.insert("s10", Self::random_data());
-        variables.insert("s11", Self::random_data());
+        variables.insert("s2".to_owned(), Self::random_data());
+        variables.insert("s3".to_owned(), Self::random_data());
+        variables.insert("s4".to_owned(), Self::random_data());
+        variables.insert("s5".to_owned(), Self::random_data());
+        variables.insert("s6".to_owned(), Self::random_data());
+        variables.insert("s7".to_owned(), Self::random_data());
+        variables.insert("s8".to_owned(), Self::random_data());
+        variables.insert("s9".to_owned(), Self::random_data());
+        variables.insert("s10".to_owned(), Self::random_data());
+        variables.insert("s11".to_owned(), Self::random_data());
 
-        variables.insert("t3", Self::random_data());
-        variables.insert("t4", Self::random_data());
-        variables.insert("t5", Self::random_data());
-        variables.insert("t6", Self::random_data());
+        variables.insert("t3".to_owned(), Self::random_data());
+        variables.insert("t4".to_owned(), Self::random_data());
+        variables.insert("t5".to_owned(), Self::random_data());
+        variables.insert("t6".to_owned(), Self::random_data());
 
         Registers {
             variables: variables
@@ -54,12 +54,12 @@ impl<'a> Registers<'a> {
         return ptr as i64;
     }
 
-    pub fn has_register(self: &Registers<'a>, register: &str) -> bool {
+    pub fn has_register(&self, register: &str) -> bool {
         self.variables.contains_key(register)
     }
 }
 
-impl Index<&str> for Registers<'_> {
+impl Index<&str> for Registers {
     type Output = i64;
 
     fn index(&self, register: &str) -> &Self::Output {
@@ -67,7 +67,7 @@ impl Index<&str> for Registers<'_> {
     }
 }
 
-impl IndexMut<&str> for Registers<'_> {
+impl IndexMut<&str> for Registers {
     fn index_mut(&mut self, register: &str) -> &mut Self::Output {
         &mut *self.variables.get_mut(register).unwrap()
     }
