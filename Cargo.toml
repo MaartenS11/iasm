@@ -7,3 +7,5 @@ edition = "2018"
 
 [dependencies]
 unescape = "0.1.0"
+cursive = "0.20.0"
+termion = "1.5.6"

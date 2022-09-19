@@ -1,9 +1,15 @@
 extern crate unescape;
 
+use std::cmp::max;
 use std::io::{self, Write};
 use std::{fs, process};
 use std::time::Instant;
 use std::env;
+use cursive::{View, Vec2};
+use cursive::view::{Scrollable, SizeConstraint, Resizable};
+use cursive::views::{Dialog, TextView, LinearLayout, BoxedView};
+use termion::color;
+
 use crate::fs::File;
 
 use crate::memory::Memory;
@@ -50,6 +56,56 @@ fn print_stack(registers: &Registers, memory: &Memory) {
     }
 }
 
+fn print_debug_programming(evaluator: &Evaluator, program: &Vec<String>) -> String {
+    let digit_count = (program.len() -1).to_string().len();
+    let termsize = termion::terminal_size().unwrap();
+    let term_height = termsize.1 as usize;
+    print!("{}", termion::clear::All);
+    let mut posy = 1;
+    let mut offset = max(evaluator.registers["eip"] -term_height as i64 / 2, 0) as usize;
+    if term_height-1 > program.len() {
+        offset = 0;
+    }
+    for i in offset..term_height-1+offset {
+        let mut current_instruction = false;
+        if i < program.len() {
+            if i as i64 == evaluator.registers["eip"] {
+                println!("{}", color::Fg(color::Black));
+                println!("{}", color::Bg(color::Blue));
+                current_instruction = true;
+            }
+        
+            let line = &program[i];
+            print!("{}", termion::cursor::Goto(3, posy));
+            let line_width = (termsize.0 as usize)/2 -3-digit_count-2-2;
+            if current_instruction {
+                println!("-> {:width$}│ {:line_width$}", i, line, width=digit_count, line_width=line_width);   
+            }
+            else {
+                println!("   {:width$}│ {:line_width$}", i, line, width=digit_count, line_width=line_width);
+            }
+            posy+=1;
+            print!("{}", color::Bg(color::Reset));
+            print!("{}", color::Fg(color::Reset));
+        }
+    }
+    let mut reg_list: Vec<&String> = Vec::new();
+    for reg in evaluator.registers.variables.keys() {
+        reg_list.push(reg);
+    }
+    reg_list.sort();
+
+    posy = 1;
+    for reg in reg_list {
+        let line = evaluator.registers[reg];
+        print!("{}", termion::cursor::Goto(termsize.0/2, posy));
+        print!("{:5}│ {}\n", reg, line);
+        posy+=1;
+    }
+    print!("{}", termion::cursor::Goto(1, termsize.1));
+    promt("$ ")
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut debug = false;
@@ -94,8 +150,31 @@ fn main() {
     }
     
     println!("Write finished");
-    
+
     let digit_count = (program.len() -1).to_string().len();
+
+    /*let mut siv = cursive::default();
+
+    // Creates a dialog with a single "Quit" button
+    siv.add_layer(Dialog::around(LinearLayout::horizontal()
+        .child(TextView::new(program.join("\n")).scrollable()
+            //.fixed_size((40, 30))
+        )
+        //.weight(1)
+        .child(TextView::new(program.join("\n")).scrollable()
+            //.fixed_size((40, 30))
+        )
+        //.weight(1)
+        //.weight(100)
+    )
+                         .title("Welcome")
+                         .button("Quit", |s| s.quit())
+                         .button("Continue", |s| s.quit())
+                         .fixed_size((80, 30))
+    );
+
+    // Starts the event loop.
+    siv.run();*/
 
     evaluator.registers["sp"] = (evaluator.memory.virtual_memory_size - data_segment_size) as i64;
     evaluator.registers["eip"] = entry_point;
@@ -113,7 +192,7 @@ fn main() {
         ins_executed += 1;
 
         if debug {
-            for i in 0..program.len() {
+            /*for i in 0..program.len() {
                 if i == eip {
                     print!("-> ") 
                 }
@@ -122,8 +201,8 @@ fn main() {
                 }   
                 //│ != |
                 println!("{:width$}│{}", i, program[i], width=digit_count);
-            }
-            let mut input = promt("$ ");
+            }*/
+            let mut input = print_debug_programming(&evaluator, &program);
             while input != "stop" && input != "continue" && input != "" {
                 if evaluator.registers.has_register(&input[..]) {
                     println!("{}", evaluator.registers[&input[..]]);
