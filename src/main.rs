@@ -1,15 +1,18 @@
 extern crate unescape;
 
 use std::cmp::max;
-use std::io::{self, Write};
+use std::io::{self, Write, stdout};
 use std::{fs, process};
 use std::time::Instant;
 use std::env;
-use cursive::{View, Vec2};
-use cursive::view::{Scrollable, SizeConstraint, Resizable};
-use cursive::views::{Dialog, TextView, LinearLayout, BoxedView};
+use cursive::{View, Vec2, Cursive};
+use cursive::view::{Scrollable, SizeConstraint, Resizable, Nameable};
+use cursive::views::{Dialog, TextView, LinearLayout, BoxedView, ViewRef, ScrollView, NamedView, Panel};
 use termion::color;
+use termion::raw::IntoRawMode;
+use termion::screen::ToMainScreen;
 
+use crate::debug_ui::{DebugUI, CodeRunner};
 use crate::fs::File;
 
 use crate::memory::Memory;
@@ -21,6 +24,7 @@ mod compile;
 mod memory;
 mod registers;
 mod evaluator;
+mod debug_ui;
 
 fn promt(message: &str) -> String {
     print!("{}", message);
@@ -56,6 +60,30 @@ fn print_stack(registers: &Registers, memory: &Memory) {
     }
 }
 
+fn format_stack(evaluator: &Evaluator) -> String {
+    let mut str = String::new();
+    let stack_offset = (evaluator.memory.virtual_memory_size - evaluator.memory.stack_memory.len()) as i64;
+    for i in (((evaluator.registers["sp"] - stack_offset)/8))..(evaluator.memory.stack_memory.len()/8) as i64 {
+        let address = (i*8 + stack_offset) as usize;
+        str += &format!("{:#04x} {:020} ", i*8 + stack_offset, evaluator.memory.load_from(i*8 + stack_offset))[..];
+        for j in 0..8 {
+            str += &format!("{:02x} ", evaluator.memory[(i*8 + stack_offset + j) as usize])[..];
+        }
+
+        /*let char_ar = [evaluator.memory[address] as char, evaluator.memory[address + 1] as char, evaluator.memory[address + 2] as char, evaluator.memory[address + 3] as char, evaluator.memory[address + 4] as char, evaluator.memory[address + 5] as char, evaluator.memory[address + 6] as char, evaluator.memory[address + 7] as char];
+        str += &format!(" ")[..];
+        for char in char_ar {
+            if char == '\n' {
+                str += &format!("\\n")[..];
+            } else {
+                str += &format!("{}", char)[..];
+            }
+        }*/
+        str += "\n";
+    }
+    str
+}
+
 fn print_debug_programming(evaluator: &Evaluator, program: &Vec<String>) -> String {
     let digit_count = (program.len() -1).to_string().len();
     let termsize = termion::terminal_size().unwrap();
@@ -71,7 +99,7 @@ fn print_debug_programming(evaluator: &Evaluator, program: &Vec<String>) -> Stri
         if i < program.len() {
             if i as i64 == evaluator.registers["eip"] {
                 println!("{}", color::Fg(color::Black));
-                println!("{}", color::Bg(color::Blue));
+                println!("{}", color::Bg(color::White));
                 current_instruction = true;
             }
         
@@ -106,7 +134,90 @@ fn print_debug_programming(evaluator: &Evaluator, program: &Vec<String>) -> Stri
     promt("$ ")
 }
 
+fn format_registers(evaluator: &Evaluator) -> String {
+    let mut reg_list: Vec<&String> = Vec::new();
+    for reg in evaluator.registers.variables.keys() {
+        reg_list.push(reg);
+    }
+    reg_list.sort();
+
+    let mut str = String::new();
+    for reg in reg_list {
+        let line = evaluator.registers[reg];
+        str += &format!("{:5}│ {}\n", reg, line)[..];
+    }
+    str
+}
+
+fn format_code(evaluator: &Evaluator, program: &Vec<String>) -> String {
+    let mut str = String::new();
+    let digit_count = (program.len() -1).to_string().len();
+    for i in 0..program.len() {
+        let current_instruction = i as i64 == evaluator.registers["eip"];
+        if i < program.len() {
+            let line = &program[i];
+            let line_width = 15; //TODO: actual max line width, but only needed if we highlight current instruction with color
+            if current_instruction {
+                str += "-> ";
+            }
+            else {
+                str += "   ";
+
+            }
+            str += &format!("{:width$}│ {:line_width$}\n", i, line, width=digit_count, line_width=line_width)[..];
+        }
+    }
+    str
+}
+
+fn step(s: &mut Cursive) {
+    let mut runner = s.find_name::<CodeRunner>("evaluator").unwrap();
+    runner.step();
+
+    s.call_on_name("source_scrollview", |textview: &mut ScrollView<NamedView<TextView>>| {
+        textview.set_offset((0, max((runner.evaluator.registers["eip"] - 35/2) as usize, 0)));
+    });
+
+    s.call_on_name("source", |textview: &mut TextView| {
+        textview.set_content(&format!("{}", format_code(&runner.evaluator, &runner.program)));
+    });
+
+    s.call_on_name("registers", |textview: &mut TextView| {
+        textview.set_content(&format!("{}", format_registers(&runner.evaluator)));
+    });
+}
+
+fn stack(s: &mut Cursive) {
+    let runner = s.find_name::<CodeRunner>("evaluator").unwrap();
+    //print_stack(&runner.evaluator.registers, &runner.evaluator.memory);
+    let stack_str = format_stack(&runner.evaluator);
+    //println!("{}", stack_str);
+    //s.add_layer(Dialog::info(stack_str));
+    s.add_layer(Dialog::around(TextView::new(stack_str).scrollable()).dismiss_button("Close").title("Stack").max_height(35));
+
+    /*let mut test_str = String::new();
+    test_str += "dfqsd";
+    test_str += "\n";
+    test_str += "dfqsd";
+    test_str += "\n";
+    test_str += "dfqsd";
+    test_str += "\n";
+    test_str += "dfqsd";
+    test_str += "\n";
+    s.add_layer(Dialog::info(test_str));*/
+}
+
 fn main() {
+    std::panic::set_hook(Box::new(move |x| {
+        stdout()
+            .into_raw_mode()
+            .unwrap()
+            .suspend_raw_mode()
+            .unwrap();
+        write!(stdout().into_raw_mode().unwrap(), "{}", ToMainScreen).unwrap();
+        write!(stdout(), "{:?}", x).unwrap();
+    }));
+
     let args: Vec<String> = env::args().collect();
     let mut debug = false;
     let mut verbose = false;
@@ -153,31 +264,46 @@ fn main() {
 
     let digit_count = (program.len() -1).to_string().len();
 
-    /*let mut siv = cursive::default();
+    evaluator.registers["sp"] = (evaluator.memory.virtual_memory_size - data_segment_size) as i64;
+    evaluator.registers["eip"] = entry_point;
+
+    let mut debug_ui = DebugUI::new();
+    debug_ui.run(&program);
+    /*while debug_ui.step() {
+
+    }*/
+    let mut siv = cursive::default();
 
     // Creates a dialog with a single "Quit" button
     siv.add_layer(Dialog::around(LinearLayout::horizontal()
-        .child(TextView::new(program.join("\n")).scrollable()
-            //.fixed_size((40, 30))
+        //.child(TextView::new(program.join("\n")).scrollable()
+        .child(Panel::new(TextView::new(format_code(&evaluator, &program))
+            .with_name("source")
+            .scrollable()
+            .with_name("source_scrollview")
+            )//.fixed_size((50, 35))
+            //.full_width()
+            .full_width()
         )
-        //.weight(1)
-        .child(TextView::new(program.join("\n")).scrollable()
-            //.fixed_size((40, 30))
+        .child(Panel::new(TextView::new(format_registers(&evaluator))
+            .with_name("registers")
+            .scrollable()
+            )//.fixed_size((50, 35))
+            .full_width()
         )
-        //.weight(1)
-        //.weight(100)
+        .child(CodeRunner::new(program.clone(), entry_point, data_segment_size, false).with_name("evaluator"))
     )
-                         .title("Welcome")
-                         .button("Quit", |s| s.quit())
-                         .button("Continue", |s| s.quit())
-                         .fixed_size((80, 30))
+                         .title("Debugging")
+                         .button("Stop debugging", |s| s.quit())
+                         .button("Display stack", stack)
+                         .button("Next instruction", step)
+                         //.full_width()
+                         //.full_height()
+                         .full_screen()
     );
 
     // Starts the event loop.
-    siv.run();*/
-
-    evaluator.registers["sp"] = (evaluator.memory.virtual_memory_size - data_segment_size) as i64;
-    evaluator.registers["eip"] = entry_point;
+    siv.run();
 
     let start = Instant::now();
     let mut ins_executed = 0;
@@ -231,7 +357,8 @@ fn main() {
         }
         match ins {
             "stack" => {
-                print_stack(&evaluator.registers, &evaluator.memory);
+                //print_stack(&evaluator.registers, &evaluator.memory);
+                print!("{}", format_stack(&evaluator));
             }
             "exit" => break,
             x => evaluator.evaluate(x)
