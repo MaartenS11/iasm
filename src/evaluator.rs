@@ -179,6 +179,14 @@ impl Evaluator {
                    self.registers["eip"] = jump_pos - 1;
                 }
             },
+            "bgt" => {
+                let a =self.registers[params[0].trim()];
+                let b =self.registers[params[1].trim()];
+                if a > b {
+                    let jump_pos: i64 = params[2].trim().parse().expect("Expected address!");
+                   self.registers["eip"] = jump_pos - 1;
+                }
+            },
             "bltu" => {
                 let a =self.registers[params[0].trim()] as u64;
                 let b =self.registers[params[1].trim()] as u64;
