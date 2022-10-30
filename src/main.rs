@@ -16,7 +16,7 @@ mod memory;
 mod registers;
 mod evaluator;
 
-fn promt(message: &str) -> String {
+fn prompt(message: &str) -> String {
     print!("{}", message);
     io::stdout().flush().unwrap();
     let mut name = String::new();
@@ -59,7 +59,7 @@ fn main() {
         eprintln!("Expected at least one argument!");
         process::exit(1);
     }
-    
+
     if args.len() >= 3 {
         match &args[args.len()-1][..] {
             "debug" => {
@@ -123,7 +123,7 @@ fn main() {
                 //│ != |
                 println!("{:width$}│{}", i, program[i], width=digit_count);
             }
-            let mut input = promt("$ ");
+            let mut input = prompt("$ ");
             while input != "stop" && input != "continue" && input != "" {
                 if evaluator.registers.has_register(&input[..]) {
                     println!("{}", evaluator.registers[&input[..]]);
@@ -134,7 +134,7 @@ fn main() {
                 else {
                     println!("Invalid command");
                 }
-                input = promt("$ ");
+                input = prompt("$ ");
             }
             if input == "stop" {
                 break;
@@ -145,17 +145,15 @@ fn main() {
     println!("Total time elapsed: {}ms, {}ns | Executed {} instructions", duration.as_millis(), duration.as_nanos(), ins_executed);
 
     loop {
-        let ins = &promt("$ ")[..];
-        if evaluator.registers.has_register(ins) {
-            println!("{}", evaluator.registers[ins]);
-            continue;
-        }
-        match ins {
+        match &prompt("$ ")[..] {
+            reg if evaluator.registers.has_register(reg) => {
+                println!("{}", evaluator.registers[reg]);
+            }
             "stack" => {
                 print_stack(&evaluator.registers, &evaluator.memory);
             }
             "exit" => break,
-            x => evaluator.evaluate(x)
+            ins => evaluator.evaluate(ins)
         }
     }
 }
