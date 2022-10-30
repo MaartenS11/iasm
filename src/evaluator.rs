@@ -18,7 +18,7 @@ impl Evaluator {
         }
     }
 
-    pub fn evaluate(&mut self, instruction: &str) {
+    pub fn evaluate(&mut self, instruction: &str) -> Result<(), String> {
         let mut instruction_name = instruction;
         let mut params_string = "";
         let s = instruction.split_once(" ");
@@ -292,13 +292,14 @@ impl Evaluator {
                         self.memory.program_break = addr as usize;
                         self.memory.heap_memory.resize(addr, 0);
                     },
-                    _ => panic!("Syscall {} is not supported", syscall_nr)
+                    _ => return Err(format!("Syscall {} is not supported", syscall_nr))
                 }
             }
-            _ => panic!("Instruction \"{}\" does not exist!", instruction_name)
+            _ => return Err(format!("Instruction \"{}\" does not exist!", instruction_name))
         }
     
         self.registers["eip"] += 1;
+        Ok(())
     }
     
     fn parse_immediate(str: &str) -> i64 {

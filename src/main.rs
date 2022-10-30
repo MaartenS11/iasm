@@ -108,7 +108,7 @@ fn main() {
         if verbose {
             println!("{}", ins);
         }
-        evaluator.evaluate(ins);
+        evaluator.evaluate(ins).expect("Error");
         eip = evaluator.registers["eip"]  as usize;
         ins_executed += 1;
 
@@ -153,7 +153,12 @@ fn main() {
                 print_stack(&evaluator.registers, &evaluator.memory);
             }
             "exit" => break,
-            ins => evaluator.evaluate(ins)
+            ins => {
+                match evaluator.evaluate(ins) {
+                    Ok(()) => {},
+                    Err(err) => println!("\x1b[31mError: {err}\x1b[0m")
+                }
+            }
         }
     }
 }
