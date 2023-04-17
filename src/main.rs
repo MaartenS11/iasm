@@ -71,7 +71,7 @@ fn print_debug_programming(evaluator: &Evaluator, program: &Vec<String>) -> Stri
         if i < program.len() {
             if i as i64 == evaluator.registers["eip"] {
                 println!("{}", color::Fg(color::Black));
-                println!("{}", color::Bg(color::Blue));
+                println!("{}", color::Bg(color::White));
                 current_instruction = true;
             }
         
@@ -95,7 +95,10 @@ fn print_debug_programming(evaluator: &Evaluator, program: &Vec<String>) -> Stri
     }
     reg_list.sort();
 
-    posy = 1;
+    
+    print!("{}", termion::cursor::Goto(termsize.0/2, 1));
+    println!("Registers:");
+    posy = 2;
     for reg in reg_list {
         let line = evaluator.registers[reg];
         print!("{}", termion::cursor::Goto(termsize.0/2, posy));
