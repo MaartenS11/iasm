@@ -5,9 +5,6 @@ use std::io::{self, Write};
 use std::{fs, process};
 use std::time::Instant;
 use std::env;
-use cursive::{View, Vec2};
-use cursive::view::{Scrollable, SizeConstraint, Resizable};
-use cursive::views::{Dialog, TextView, LinearLayout, BoxedView};
 use termion::color;
 
 use crate::fs::File;
@@ -22,7 +19,7 @@ mod memory;
 mod registers;
 mod evaluator;
 
-fn promt(message: &str) -> String {
+fn prompt(message: &str) -> String {
     print!("{}", message);
     io::stdout().flush().unwrap();
     let mut name = String::new();
@@ -106,7 +103,7 @@ fn print_debug_programming(evaluator: &Evaluator, program: &Vec<String>) -> Stri
         posy+=1;
     }
     print!("{}", termion::cursor::Goto(1, termsize.1));
-    promt("$ ")
+    prompt("$ ")
 }
 
 fn main() {
@@ -118,7 +115,7 @@ fn main() {
         eprintln!("Expected at least one argument!");
         process::exit(1);
     }
-    
+
     if args.len() >= 3 {
         match &args[args.len()-1][..] {
             "debug" => {
@@ -154,7 +151,7 @@ fn main() {
     
     println!("Write finished");
 
-    let digit_count = (program.len() -1).to_string().len();
+    //let digit_count = (program.len() -1).to_string().len();
 
     /*let mut siv = cursive::default();
 
@@ -190,7 +187,7 @@ fn main() {
         if verbose {
             println!("{}", ins);
         }
-        evaluator.evaluate(ins);
+        evaluator.evaluate(ins).expect("Error");
         eip = evaluator.registers["eip"]  as usize;
         ins_executed += 1;
 
@@ -216,7 +213,7 @@ fn main() {
                 else {
                     println!("Invalid command");
                 }
-                input = promt("$ ");
+                input = prompt("$ ");
             }
             if input == "stop" {
                 break;
@@ -227,17 +224,20 @@ fn main() {
     println!("Total time elapsed: {}ms, {}ns | Executed {} instructions", duration.as_millis(), duration.as_nanos(), ins_executed);
 
     loop {
-        let ins = &promt("$ ")[..];
-        if evaluator.registers.has_register(ins) {
-            println!("{}", evaluator.registers[ins]);
-            continue;
-        }
-        match ins {
+        match &prompt("$ ")[..] {
+            reg if evaluator.registers.has_register(reg) => {
+                println!("{}", evaluator.registers[reg]);
+            }
             "stack" => {
                 print_stack(&evaluator.registers, &evaluator.memory);
             }
             "exit" => break,
-            x => evaluator.evaluate(x)
+            ins => {
+                match evaluator.evaluate(ins) {
+                    Ok(()) => {},
+                    Err(err) => println!("\x1b[31mError: {err}\x1b[0m")
+                }
+            }
         }
     }
 }
